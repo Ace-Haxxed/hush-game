@@ -1,0 +1,145 @@
+.dialogue {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  justify-content: center;
+  padding: clamp(0.6rem, 2.5vw, 1.25rem);
+  pointer-events: none;
+  animation: dlgUp 0.3s ease both;
+  transition: opacity 0.2s ease;
+}
+
+/* semi-transparent so the player can see the ghost approaching */
+.dialogue--dim {
+  opacity: 0.42;
+}
+
+@keyframes dlgUp {
+  from { transform: translateY(40px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.dialogue__box {
+  position: relative;
+  width: min(42rem, 100%);
+  max-height: 30vh;
+  overflow: hidden;
+  padding: 0.8rem 1.1rem 0.6rem;
+  border: 1px solid rgba(120, 95, 60, 0.5);
+  border-radius: 6px;
+  /* aged paper via layered gradients */
+  background:
+    radial-gradient(120% 80% at 20% 0%, rgba(80, 60, 35, 0.35), transparent 60%),
+    radial-gradient(140% 90% at 90% 100%, rgba(60, 40, 20, 0.3), transparent 55%),
+    linear-gradient(180deg, rgba(28, 24, 18, 0.94), rgba(16, 13, 10, 0.96));
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.8), inset 0 0 40px rgba(0, 0, 0, 0.5);
+  color: #d8cdb6;
+}
+
+.dialogue__bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 6px 6px 0 0;
+  overflow: hidden;
+}
+.dialogue__bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #8b0000, #ff3333);
+  transition: width 0.08s linear;
+}
+
+/* dismiss (X) button — large enough to thumb */
+.dialogue__dismiss {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: none;
+  color: rgba(216, 205, 182, 0.6);
+  font-size: 1.1rem;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 2;
+}
+.dialogue__dismiss:active { color: #ff6a6a; }
+
+.dialogue__row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-height: 3.4rem;
+}
+
+/* player silhouette with a little flashlight beam */
+.dialogue__avatar {
+  position: relative;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 56px;
+}
+.dialogue__avatar-head {
+  position: absolute;
+  left: 8px;
+  bottom: 0;
+  width: 30px;
+  height: 46px;
+  border-radius: 14px 14px 6px 6px;
+  background: #05070a;
+  box-shadow: 0 0 0 1px rgba(150, 200, 255, 0.15);
+}
+.dialogue__avatar-head::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 7px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #02040a;
+}
+.dialogue__avatar-beam {
+  position: absolute;
+  right: -6px;
+  top: 12px;
+  width: 0;
+  height: 0;
+  border-top: 9px solid transparent;
+  border-bottom: 9px solid transparent;
+  border-left: 22px solid rgba(220, 235, 255, 0.28);
+  filter: blur(1px);
+}
+
+.dialogue__text {
+  margin: 0;
+  padding-right: 2rem; /* clear the dismiss button */
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  font-size: clamp(1rem, 4vw, 1.2rem); /* never below 16px */
+  line-height: 1.5;
+  color: #e6dcc4;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+.dialogue__caret {
+  color: #ff6a6a;
+  animation: caret 0.7s steps(1) infinite;
+}
+@keyframes caret { 50% { opacity: 0; } }
+
+.dialogue__hint {
+  margin-top: 0.4rem;
+  text-align: right;
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(216, 205, 182, 0.45);
+}

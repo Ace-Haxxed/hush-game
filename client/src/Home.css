@@ -1,0 +1,397 @@
+/* Horror display font for the title — falls back to a heavy system serif. */
+@import url("https://fonts.googleapis.com/css2?family=Creepster&display=swap");
+
+.home {
+  position: relative;
+  min-height: 100svh;
+  width: 100%;
+  overflow: hidden;
+  background: #0a0a0a;
+  color: #c9c9c9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1.25rem, 5vw, 3rem);
+  isolation: isolate;
+}
+
+/* ----------------------------------------------------------------------------
+   Layer 0 — deep red vignette that breathes like a dying ember
+---------------------------------------------------------------------------- */
+.home__vignette {
+  position: absolute;
+  inset: 0;
+  z-index: -3;
+  background:
+    radial-gradient(
+      circle at 50% 42%,
+      rgba(139, 0, 0, 0.22) 0%,
+      rgba(139, 0, 0, 0.06) 28%,
+      rgba(10, 10, 10, 0) 60%
+    ),
+    radial-gradient(circle at 50% 50%, #141010 0%, #0a0a0a 70%);
+  animation: emberPulse 6s ease-in-out infinite;
+}
+
+@keyframes emberPulse {
+  0%,
+  100% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+   Layer 1 — static TV: scanlines + grain + an irregular flicker
+---------------------------------------------------------------------------- */
+.home__static {
+  position: absolute;
+  inset: -50%;
+  z-index: -2;
+  pointer-events: none;
+  /* fine animated grain */
+  background-image:
+    repeating-radial-gradient(
+      rgba(255, 255, 255, 0.035) 0 1px,
+      transparent 1px 3px
+    );
+  background-size: 4px 4px;
+  opacity: 0.5;
+  animation: grainShift 0.6s steps(4) infinite, tvFlicker 7s infinite;
+}
+
+/* horizontal scanlines, drifting slowly down the screen */
+.home__scanlines {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.35) 3px,
+    rgba(0, 0, 0, 0) 4px
+  );
+  opacity: 0.4;
+  animation: scanRoll 8s linear infinite;
+  mix-blend-mode: multiply;
+}
+
+@keyframes grainShift {
+  0% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(-3%, 2%);
+  }
+  50% {
+    transform: translate(2%, -2%);
+  }
+  75% {
+    transform: translate(-2%, -3%);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes scanRoll {
+  from {
+    background-position-y: 0;
+  }
+  to {
+    background-position-y: 100px;
+  }
+}
+
+/* whole-screen brightness flicker — the "signal is dying" effect */
+@keyframes tvFlicker {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  8% {
+    opacity: 0.32;
+  }
+  9% {
+    opacity: 0.6;
+  }
+  12% {
+    opacity: 0.4;
+  }
+  20% {
+    opacity: 0.55;
+  }
+  21% {
+    opacity: 0.2;
+  }
+  22% {
+    opacity: 0.55;
+  }
+  55% {
+    opacity: 0.5;
+  }
+  56% {
+    opacity: 0.7;
+  }
+  57% {
+    opacity: 0.35;
+  }
+  58% {
+    opacity: 0.55;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+   Title — "HUSH" in a distressed face with a flickering blood glow
+---------------------------------------------------------------------------- */
+.home__title {
+  margin: 0;
+  font-family: "Creepster", "Impact", "Haettenschweiler", "Arial Narrow Bold",
+    sans-serif;
+  font-weight: 400;
+  letter-spacing: clamp(0.4rem, 3vw, 1.6rem);
+  text-indent: clamp(0.4rem, 3vw, 1.6rem); /* offset trailing letter-spacing */
+  font-size: clamp(5rem, 26vw, 16rem);
+  line-height: 0.9;
+  text-align: center;
+  color: #d6caca;
+  text-shadow:
+    0 0 4px rgba(255, 51, 51, 0.5),
+    0 0 18px rgba(139, 0, 0, 0.9),
+    0 0 48px rgba(139, 0, 0, 0.7),
+    0 2px 0 rgba(0, 0, 0, 0.8);
+  animation: titleFlicker 4.5s infinite;
+}
+
+/* erratic candle/neon flicker on the glow + tiny opacity dips */
+@keyframes titleFlicker {
+  0%,
+  100% {
+    opacity: 1;
+    text-shadow:
+      0 0 4px rgba(255, 51, 51, 0.5),
+      0 0 18px rgba(139, 0, 0, 0.9),
+      0 0 48px rgba(139, 0, 0, 0.7),
+      0 2px 0 rgba(0, 0, 0, 0.8);
+  }
+  6% {
+    opacity: 0.78;
+  }
+  7% {
+    opacity: 1;
+  }
+  10% {
+    text-shadow:
+      0 0 2px rgba(255, 51, 51, 0.4),
+      0 0 8px rgba(139, 0, 0, 0.6),
+      0 2px 0 rgba(0, 0, 0, 0.8);
+  }
+  11% {
+    opacity: 0.85;
+  }
+  12% {
+    opacity: 1;
+  }
+  40% {
+    text-shadow:
+      0 0 6px rgba(255, 51, 51, 0.7),
+      0 0 26px rgba(255, 51, 51, 0.55),
+      0 0 60px rgba(139, 0, 0, 0.8),
+      0 2px 0 rgba(0, 0, 0, 0.8);
+  }
+  41% {
+    opacity: 0.7;
+  }
+  42% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 0.92;
+  }
+}
+
+.home__tagline {
+  margin: clamp(1rem, 4vw, 2rem) 0 0;
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  font-style: italic;
+  letter-spacing: 0.18em;
+  font-size: clamp(1rem, 4.5vw, 1.6rem);
+  color: rgba(201, 201, 201, 0.82);
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.9);
+  animation: taglineBreath 5s ease-in-out infinite;
+}
+
+@keyframes taglineBreath {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+   Buttons
+---------------------------------------------------------------------------- */
+.home__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: clamp(0.75rem, 3vw, 1.25rem);
+  justify-content: center;
+  margin-top: clamp(2rem, 7vw, 3.5rem);
+  width: 100%;
+  max-width: 30rem;
+}
+
+.home__btn {
+  flex: 1 1 9rem;
+  min-width: 8.5rem;
+  padding: 0.9rem 1.4rem;
+  font-size: clamp(0.95rem, 3.6vw, 1.05rem);
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: transform 0.18s ease, box-shadow 0.25s ease,
+    background-color 0.25s ease, color 0.25s ease;
+}
+
+.home__btn:active {
+  transform: translateY(1px) scale(0.99);
+}
+
+.home__btn--primary {
+  background: linear-gradient(180deg, #8b0000 0%, #5e0000 100%);
+  color: #f3e9e9;
+  border: 1px solid #b00000;
+  box-shadow: 0 0 18px rgba(139, 0, 0, 0.5), inset 0 0 12px rgba(0, 0, 0, 0.4);
+}
+
+.home__btn--primary:hover {
+  box-shadow: 0 0 28px rgba(255, 51, 51, 0.7), inset 0 0 12px rgba(0, 0, 0, 0.4);
+  color: #fff;
+}
+
+.home__btn--ghost {
+  background: rgba(17, 17, 17, 0.6);
+  color: #c9c9c9;
+  border: 1px solid rgba(139, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+.home__btn--ghost:hover {
+  border-color: #ff3333;
+  color: #ff3333;
+  box-shadow: 0 0 18px rgba(255, 51, 51, 0.35);
+}
+
+/* ----------------------------------------------------------------------------
+   Footer — chapter line
+---------------------------------------------------------------------------- */
+.home__footer {
+  position: absolute;
+  bottom: clamp(1.1rem, 4vw, 2rem);
+  left: 0;
+  right: 0;
+  z-index: 2;
+  text-align: center;
+  font-size: clamp(0.7rem, 3vw, 0.85rem);
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: rgba(201, 201, 201, 0.55);
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.9);
+}
+
+.home__footer span {
+  color: rgba(255, 51, 51, 0.75);
+}
+
+/* ----------------------------------------------------------------------------
+   Layer 3 — rolling fog at the bottom of the screen
+---------------------------------------------------------------------------- */
+.home__fog {
+  position: absolute;
+  left: -25%;
+  right: -25%;
+  bottom: -10%;
+  height: 45vh;
+  z-index: 1;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to top, #000 30%, transparent 100%);
+  mask-image: linear-gradient(to top, #000 30%, transparent 100%);
+}
+
+.home__fog::before,
+.home__fog::after {
+  content: "";
+  position: absolute;
+  inset: -20% -50%;
+  background:
+    radial-gradient(
+      40% 60% at 20% 80%,
+      rgba(120, 120, 130, 0.16) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      45% 55% at 55% 70%,
+      rgba(90, 90, 110, 0.14) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      35% 50% at 85% 85%,
+      rgba(139, 0, 0, 0.1) 0%,
+      transparent 60%
+    );
+  filter: blur(22px);
+}
+
+.home__fog::before {
+  animation: fogDrift1 26s linear infinite;
+}
+
+.home__fog::after {
+  opacity: 0.7;
+  animation: fogDrift2 38s linear infinite;
+}
+
+@keyframes fogDrift1 {
+  from {
+    transform: translateX(-12%) translateY(0);
+  }
+  to {
+    transform: translateX(12%) translateY(-4%);
+  }
+}
+
+@keyframes fogDrift2 {
+  from {
+    transform: translateX(10%);
+  }
+  to {
+    transform: translateX(-14%);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+   Accessibility — respect reduced-motion
+---------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .home__static,
+  .home__scanlines,
+  .home__vignette,
+  .home__title,
+  .home__tagline,
+  .home__fog::before,
+  .home__fog::after {
+    animation: none;
+  }
+}

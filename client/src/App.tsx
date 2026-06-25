@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Routes, Route, Link } from "react-router-dom";
 import { GamePhase, GameState } from "@hush/shared";
 import { socket } from "./socket";
+import Home from "./Home";
+import Game from "./Game";
 
 function Lobby() {
   const [state, setState] = useState<GameState | null>(null);
@@ -72,7 +74,10 @@ function About() {
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Lobby />} />
+      <Route path="/" element={<Home />} />
+      <Route path="/game" element={<Game />} />
+      <Route path="/solo" element={<Game />} />
+      <Route path="/lobby" element={<Lobby />} />
       <Route path="/about" element={<About />} />
     </Routes>
   );

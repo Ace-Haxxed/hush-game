@@ -1,0 +1,165 @@
+/* ===========================================================================
+   Polaroid clue cards — stacked in the bottom-left corner. Each animates up
+   from below on mount and flips on tap/click to reveal its full description.
+   =========================================================================== */
+
+.clue-stack {
+  position: fixed;
+  left: clamp(0.75rem, 3vw, 1.5rem);
+  bottom: clamp(0.75rem, 3vw, 1.5rem);
+  z-index: 14;
+  /* cards are absolutely placed; this just anchors the corner */
+  width: var(--clue-w);
+  height: 1px;
+  --clue-w: clamp(8.5rem, 34vw, 10.5rem);
+  --clue-gap: 2.6rem; /* vertical reveal between stacked cards */
+}
+
+.clue {
+  position: absolute;
+  left: 0;
+  bottom: calc(var(--i) * var(--clue-gap));
+  width: var(--clue-w);
+  /* entrance: rise up from off-screen + fade in */
+  animation: clueIn 0.6s cubic-bezier(0.18, 0.7, 0.2, 1) both;
+  perspective: 900px;
+}
+
+@keyframes clueIn {
+  from {
+    transform: translateY(140%) scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+/* the flipping element — also carries the resting tilt */
+.clue__flip {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  transform-style: preserve-3d;
+  transform: rotate(var(--tilt, -2deg));
+  transition: transform 0.55s cubic-bezier(0.2, 0.7, 0.2, 1),
+    filter 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, 0.7));
+}
+
+.clue__flip:hover {
+  filter: drop-shadow(0 10px 24px rgba(139, 0, 0, 0.5));
+}
+
+.clue__flip.is-flipped {
+  transform: rotate(0deg) scale(1.12) rotateY(180deg);
+}
+
+/* faces */
+.clue__face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  background: #efe9df;
+  border-radius: 2px;
+}
+
+.clue__face--front {
+  padding: 0.55rem 0.55rem 0;
+}
+
+.clue__photo {
+  position: relative;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: radial-gradient(
+    circle at 50% 38%,
+    color-mix(in srgb, var(--tint, #2a2a2a) 75%, #000) 0%,
+    #050505 82%
+  );
+}
+
+.clue__glyph {
+  font-size: 2.4rem;
+  color: rgba(255, 80, 80, 0.85);
+  text-shadow: 0 0 14px rgba(139, 0, 0, 0.9);
+}
+
+.clue__grain {
+  position: absolute;
+  inset: 0;
+  background-image: repeating-radial-gradient(
+    rgba(255, 255, 255, 0.06) 0 1px,
+    transparent 1px 3px
+  );
+  background-size: 3px 3px;
+  mix-blend-mode: screen;
+  opacity: 0.5;
+}
+
+.clue__caption {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.45rem 0.15rem 0.6rem;
+  font-family: "Courier New", monospace;
+  color: #2a2622;
+}
+
+.clue__title {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.clue__loc {
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8b0000;
+}
+
+/* back face */
+.clue__face--back {
+  transform: rotateY(180deg);
+  justify-content: space-between;
+  padding: 0.8rem 0.7rem;
+  background: #efe9df;
+}
+
+.clue__desc {
+  font-family: ui-serif, Georgia, serif;
+  font-style: italic;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: #221f1c;
+}
+
+.clue__no {
+  align-self: flex-end;
+  font-family: "Courier New", monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  color: #8b0000;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clue {
+    animation: none;
+  }
+  .clue__flip {
+    transition: none;
+  }
+}
