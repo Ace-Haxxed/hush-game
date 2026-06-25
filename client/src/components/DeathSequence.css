@@ -1,0 +1,48 @@
+.death {
+  position: fixed;
+  inset: 0;
+  z-index: 75;
+  display: grid;
+  place-items: center;
+  background: #000;
+  animation: deathIn 0.4s ease both;
+}
+
+@keyframes deathIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* a single hollow red eye that opens, then locks on */
+.death__eye {
+  position: relative;
+  width: clamp(120px, 40vw, 220px);
+  height: 4px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(255, 30, 30, 0.95), rgba(80, 0, 0, 0.4) 70%, transparent);
+  box-shadow: 0 0 40px rgba(255, 0, 0, 0.5);
+  animation: eyeOpen 1.6s ease 0.5s forwards, eyeFlicker 0.12s steps(2) 2.1s 6;
+  opacity: 0;
+}
+
+@keyframes eyeOpen {
+  0% { height: 4px; opacity: 0; }
+  20% { opacity: 1; }
+  100% { height: clamp(70px, 24vw, 130px); opacity: 1; }
+}
+@keyframes eyeFlicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
+
+.death__pupil {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 22%;
+  height: 70%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #000;
+  box-shadow: 0 0 14px rgba(255, 0, 0, 0.8) inset;
+}

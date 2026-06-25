@@ -1,0 +1,48 @@
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  background: #000;
+  padding: 2rem;
+  /* hold on black, then fade the whole overlay out to reveal the house */
+  animation: introOut 1.4s ease forwards;
+  animation-delay: 7.4s;
+}
+
+@keyframes introOut {
+  from { opacity: 1; }
+  to { opacity: 0; visibility: hidden; }
+}
+
+.intro__lines {
+  max-width: 34rem;
+  text-align: center;
+}
+
+.intro__line {
+  margin: 0 0 1.4rem;
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  font-size: clamp(1.1rem, 5vw, 1.7rem);
+  letter-spacing: 0.06em;
+  color: #c9c9c9;
+  opacity: 0;
+  animation: introLine 2.4s ease forwards;
+  text-shadow: 0 0 18px rgba(139, 0, 0, 0.5);
+}
+
+.intro__line:last-child {
+  color: #ff6a6a;
+  font-style: italic;
+}
+
+@keyframes introLine {
+  0% { opacity: 0; }
+  25% { opacity: 1; }
+  100% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intro__line { animation: none; opacity: 1; }
+}

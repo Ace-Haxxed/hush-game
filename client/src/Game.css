@@ -265,6 +265,42 @@
   50% { box-shadow: 0 0 0 14px rgba(255, 51, 51, 0); border-color: #ff6a6a; }
 }
 
+/* mobile hold-breath button (bottom center, only while mic is live) */
+.breath-btn {
+  position: absolute;
+  bottom: clamp(5.5rem, 18vw, 7.5rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 13;
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(14, 18, 26, 0.85);
+  color: #cfe6ff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  touch-action: none;
+}
+.breath-btn__ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: conic-gradient(#6cc0ff 360deg, rgba(255, 255, 255, 0.08) 0deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 5px));
+  pointer-events: none;
+}
+.breath-btn__label {
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.15;
+  text-align: center;
+}
+.breath-btn:active { background: rgba(30, 50, 80, 0.75); }
+
 /* rotate-device prompt (touch + landscape only) */
 .rotate-warn {
   display: none;

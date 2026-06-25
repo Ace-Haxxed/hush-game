@@ -357,9 +357,9 @@ export function playShriek(): void {
   master.gain.exponentialRampToValueAtTime(0.0001, now + 1.1);
 }
 
-/** Distant child humming — the music-box motif (E5, C5, A4). */
+/** Distant child humming — the music-box motif (E5, C5, A4). Volume scalable. */
 export const MUSIC_BOX_NOTES = [659.25, 523.25, 440.0];
-export function playLullaby(): void {
+export function playLullaby(vol = 0.045): void {
   const ac = getCtx();
   if (!ac) return;
   let t = ac.currentTime + 0.05;
@@ -370,12 +370,61 @@ export function playLullaby(): void {
     lp.type = "lowpass"; lp.frequency.value = 1100;
     const g = ac.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.045, t + 0.06);
+    g.gain.exponentialRampToValueAtTime(Math.max(vol, 0.0002), t + 0.06);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
     o.connect(lp); lp.connect(g); g.connect(ac.destination);
     o.start(t); o.stop(t + 0.62);
     t += 0.55;
   }
+}
+
+/** A sharp, startling stab — random unease even when the ghost is far. */
+export function playSting(): void {
+  const ac = getCtx();
+  if (!ac) return;
+  const now = ac.currentTime;
+  const master = ac.createGain();
+  master.gain.value = 0.0001;
+  master.connect(ac.destination);
+  for (const f of [1200, 1270, 1900]) {
+    const o = ac.createOscillator();
+    o.type = "sawtooth";
+    o.frequency.setValueAtTime(f, now);
+    o.frequency.linearRampToValueAtTime(f * 0.9, now + 0.25);
+    const g = ac.createGain(); g.gain.value = 0.05;
+    o.connect(g); g.connect(master);
+    o.start(now); o.stop(now + 0.3);
+  }
+  const len = Math.floor(ac.sampleRate * 0.12);
+  const b = ac.createBuffer(1, len, ac.sampleRate);
+  const d = b.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 1.5);
+  const src = ac.createBufferSource(); src.buffer = b;
+  const hp = ac.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 2000;
+  const ng = ac.createGain(); ng.gain.value = 0.12;
+  src.connect(hp); hp.connect(ng); ng.connect(master);
+  src.start(now); src.stop(now + 0.12);
+  master.gain.setValueAtTime(0.0001, now);
+  master.gain.exponentialRampToValueAtTime(0.38, now + 0.01);
+  master.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+}
+
+/** A distant low boom — the house waking up when the grace period ends. */
+export function playBoom(): void {
+  const ac = getCtx();
+  if (!ac) return;
+  const now = ac.currentTime;
+  const o = ac.createOscillator();
+  o.type = "sine";
+  o.frequency.setValueAtTime(80, now);
+  o.frequency.exponentialRampToValueAtTime(34, now + 1.2);
+  const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 200;
+  const g = ac.createGain();
+  g.gain.setValueAtTime(0.0001, now);
+  g.gain.exponentialRampToValueAtTime(0.3, now + 0.04);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + 1.4);
+  o.connect(lp); lp.connect(g); g.connect(ac.destination);
+  o.start(now); o.stop(now + 1.5);
 }
 
 /** Silence the continuous engines (on unmount / game over). */

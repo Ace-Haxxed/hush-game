@@ -2,8 +2,20 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import EndScreen from "./components/EndScreen";
 import DialogueBox from "./components/DialogueBox";
+import IntroSequence from "./components/IntroSequence";
+import DeathSequence from "./components/DeathSequence";
+import MicPrompt from "./components/MicPrompt";
 import { ClueStack } from "./components/Clue";
 import { useClues } from "./game/useClues";
+import {
+  MIC_THRESHOLD,
+  MIC_WARNING,
+  micActive,
+  micSupported,
+  micVolume,
+  muteMic,
+  stopMic,
+} from "./game/mic";
 import {
   ensureAudio,
   heartbeatUpdate,
@@ -14,7 +26,8 @@ import {
   playBuzz,
   playShriek,
   playLullaby,
-  playCaught,
+  playSting,
+  playBoom,
   playEndDrone,
   silenceAll,
 } from "./game/sound";
@@ -44,6 +57,9 @@ const ROOM_CENTER: Record<string, Vec> = {
 const DOORWAY: Record<string, Vec> = {
   kitchen: { x: -260, y: 0 }, study: { x: 260, y: 0 }, basement: { x: 0, y: 200 },
 };
+const NEIGHBORS: Record<string, string[]> = {
+  foyer: ["kitchen", "study", "basement"], kitchen: ["foyer"], study: ["foyer"], basement: ["foyer"],
+};
 
 const vWall = (x: number, yA: number, yB: number): Rect => ({
   minx: x - T / 2, maxx: x + T / 2, miny: Math.min(yA, yB) - T / 2, maxy: Math.max(yA, yB) + T / 2,
@@ -60,11 +76,33 @@ const STATIC_WALLS: Rect[] = [
 
 const EXIT_POS = { x: 0, y: -200 };
 const BASEMENT_DOOR = { x: 0, y: 200 };
+// spread out so the player has to actually explore each room
 const CLUE_OBJECTS = [
-  { id: "clue-musicbox", x: -520, y: 0 },
-  { id: "clue-drawing", x: 520, y: 0 },
-  { id: "clue-elara", x: 0, y: 420 },
+  { id: "clue-musicbox", x: -720, y: -130 },
+  { id: "clue-drawing", x: 720, y: 130 },
+  { id: "clue-elara", x: 0, y: 545 },
 ];
+const BASEMENT_CLUE_ID = "clue-elara";
+const BASEMENT_READ_SECS = 5; // must linger in the basement to read it
+
+/** Fake drawers — open them, find nothing. Builds the explore habit. */
+const DECOYS: { x: number; y: number; text: string }[] = [
+  { x: -150, y: -150, text: "An empty drawer." },
+  { x: 170, y: 150, text: "Nothing but cobwebs." },
+  { x: -680, y: 120, text: "Old receipts. Faded to nothing." },
+  { x: 680, y: -120, text: "Just cutlery. Cold to the touch." },
+  { x: -180, y: 320, text: "A coal scuttle. Empty." },
+];
+
+/** Red herring — reads like a clue, but it doesn't fit. */
+const HERRING = { id: "herring-photo", x: 130, y: -150 };
+const HERRING_DIALOGUE = [
+  "A polaroid photo. The whole family, smiling.",
+  "They look happy. Recent, even.",
+  "The date in the corner reads 2019.",
+  "But this house has been empty since 1987.",
+];
+const HERRING_NOTE = "A photo dated 2019 — that's impossible";
 const HIDE_SPOTS = [
   { id: "wardrobe", room: "study", x: 720, y: -150 },
   { id: "stairs", room: "foyer", x: -200, y: 150 },
@@ -98,7 +136,7 @@ const CLUE_NOTE: Record<string, string> = {
 const PLAYER_SPEED = 168, PLAYER_R = 11;
 const NPC_R = 9, NPC_SPEED = 158;
 const GHOST_R = 15, GHOST_ROAM = 56, GHOST_HUNT = 122, GHOST_SPEED_PER_CLUE = 0.15;
-const GHOST_DETECT = 250, GHOST_LOSE = 580;
+const GHOST_LOSE = 580;
 const CONE_HALF = (70 / 2) * (Math.PI / 180);
 const CONE_LEN = 250;
 const FLICKER_DIST = 200, BLACKOUT_DIST = 100, BLACKOUT_MS = 1500;
@@ -144,6 +182,14 @@ export default function Game() {
   const [dialogue, setDialogue] = useState<string[] | null>(null);
   const [dlgDim, setDlgDim] = useState(false);
   const [actPulse, setActPulse] = useState(false);
+  const [intro, setIntro] = useState(true);
+  const [death, setDeath] = useState(false);
+  const introRef = useRef(true);
+  // mic gate: if unsupported, skip the prompt entirely (silently, no mic)
+  const [micAsked, setMicAsked] = useState(() => !micSupported());
+  const [micOn, setMicOn] = useState(false);
+  const breathHoldRef = useRef(false);
+  const breathRingRef = useRef<HTMLDivElement>(null);
   const [isTouch] = useState(
     () => typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches
   );
@@ -157,13 +203,23 @@ export default function Game() {
 
     const player = { x: 0, y: 0, idle: 0 };
     const ghost = {
-      x: 0, y: 520, mode: "roam" as "roam" | "hunt", lose: 0, seed: Math.random() * 99,
-      patrolUntil: 0, patrol: { x: 0, y: 400 }, distractUntil: 0,
-      attackState: "idle" as "idle" | "charging", nextAttackAt: performance.now() + ATTACK_MIN,
+      x: 0, y: 540, mode: "roam" as "roam" | "hunt", lose: 0, seed: Math.random() * 99,
+      distractUntil: 0,
+      attackState: "idle" as "idle" | "charging", nextAttackAt: 0,
       chargeUntil: 0, frozenUntil: 0, warn1: false, warn2: false, fireAt: 0,
-      prevX: 0, prevY: 520, stepAcc: 0, footSide: 1, hideSearchT: 0,
+      prevX: 0, prevY: 540, stepAcc: 0, footSide: 1, hideSearchT: 0,
       trail: [] as Vec[],
+      // pacing
+      behavior: "move" as "move" | "idle" | "dash",
+      behaviorUntil: 0, dashTarget: { x: 0, y: 0 },
+      patrolPath: [] as string[], patrolIdx: 0, breakAt: 0,
     };
+    // pick 2–3 preferred rooms to circle
+    ghost.patrolPath = (() => {
+      const a = ["foyer", "kitchen", "study", "basement"];
+      for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+      return a.slice(0, 3);
+    })();
     const npc = {
       x: -36, y: 44, alive: true, selected: false, hidden: false,
       mode: "follow" as "follow" | "goto" | "check",
@@ -183,7 +239,15 @@ export default function Game() {
     let lullabyNext = 1200;
     let ghostRoomPrev: string | null = null;
     let playerSpot: (typeof HIDE_SPOTS)[number] | null = null;
-    let dialogueClueId: string | null = null;
+    let pendingNote: { text: string; x: number; y: number } | null = null;
+    let reading = 0; // basement-clue channel progress (seconds)
+    let warmupUntil = 0; // flashlight warm-up
+    let graceEnded = false;
+    let stingAt = 0;
+    // mic detection + hold-breath
+    let micCheckAt = 0, micLevel = 0, micHuntUntil = 0, micHeardUntil = 0;
+    let micFlash = 0, micStaticAt = 0, micLastSound = -9999;
+    let holding = false, breathMeter = 1, breathCdUntil = 0;
 
     function currentWalls(): Rect[] {
       const w = STATIC_WALLS.slice();
@@ -212,43 +276,50 @@ export default function Game() {
       if (d > 1) { ent.x += (dx / d) * sp * dt; ent.y += (dy / d) * sp * dt; }
     }
 
-    function openDialogue(id: string) {
-      const lines = CLUE_DIALOGUE[id];
-      if (!lines) return;
-      dialogueClueId = id;
+    function openDialogue(lines: string[], note?: { text: string; x: number; y: number }) {
       dialogueRef.current = true;
       setDialogue(lines);
+      pendingNote = note ?? null;
     }
-    /** Close the dialogue and leave a fading note over the clue's spot. */
+    /** Close the dialogue and leave a fading note over the spot. */
     function closeDialogue() {
       if (!dialogueRef.current) return;
       dialogueRef.current = false;
       setDialogue(null);
       setDlgDim(false);
       lastDim = false;
-      const id = dialogueClueId;
-      dialogueClueId = null;
-      if (id) {
-        const c = CLUE_OBJECTS.find((o) => o.id === id);
-        if (c && CLUE_NOTE[id]) notes.push({ x: c.x, y: c.y, text: CLUE_NOTE[id], t: perf });
-      }
+      if (pendingNote) { notes.push({ ...pendingNote, t: perf }); pendingNote = null; }
     }
     closeDialogueRef.current = closeDialogue;
     function onCluePickedUp() {
       pingT = PING_SECS;
       if (perf >= ghost.distractUntil) {
-        ghost.mode = "hunt";
-        ghost.patrol = { x: player.x, y: player.y };
-        ghost.patrolUntil = perf + 1500;
+        ghost.mode = "hunt"; // the noise drew it toward you
+        ghost.behavior = "move";
       }
     }
+    let herringRead = false;
     function doInteract() {
       if (ended || dialogueRef.current || hidingRef.current) return;
       const api = clueRef.current;
+      // real clues (basement is channeled separately, so skip it here)
       for (const c of CLUE_OBJECTS) {
-        if (api.foundIds.has(c.id)) continue;
+        if (c.id === BASEMENT_CLUE_ID || api.foundIds.has(c.id)) continue;
         if (dist(player.x, player.y, c.x, c.y) < HIDE_RANGE + 6) {
-          if (api.findClue(c.id)) { onCluePickedUp(); openDialogue(c.id); }
+          if (api.findClue(c.id)) { onCluePickedUp(); openDialogue(CLUE_DIALOGUE[c.id], { text: CLUE_NOTE[c.id], x: c.x, y: c.y }); }
+          return;
+        }
+      }
+      // red herring — looks like a clue, doesn't count
+      if (!herringRead && dist(player.x, player.y, HERRING.x, HERRING.y) < HIDE_RANGE + 6) {
+        herringRead = true; pingT = 0;
+        openDialogue(HERRING_DIALOGUE, { text: HERRING_NOTE, x: HERRING.x, y: HERRING.y });
+        return;
+      }
+      // fake drawers
+      for (const dq of DECOYS) {
+        if (dist(player.x, player.y, dq.x, dq.y) < HIDE_RANGE + 6) {
+          notes.push({ x: dq.x, y: dq.y, text: dq.text, t: perf });
           return;
         }
       }
@@ -279,11 +350,17 @@ export default function Game() {
     function triggerEnd(kind: "escape" | "caught") {
       if (ended) return;
       ended = true;
-      if (dialogueRef.current) { dialogueRef.current = false; setDialogue(null); caughtFx = 1.4; }
+      if (dialogueRef.current) { dialogueRef.current = false; setDialogue(null); }
       silenceAll();
-      if (kind === "caught") { playCaught(); caughtFx = Math.max(caughtFx, 1.2); }
-      else playEndDrone();
-      setEnding(kind); setShowEnd(true);
+      if (kind === "caught") {
+        // slow, earned death: DeathSequence handles breathing + the eye, then EndScreen
+        setEnding("caught");
+        setDeath(true);
+      } else {
+        playEndDrone();
+        setEnding("escape");
+        setShowEnd(true);
+      }
     }
 
     function ghostTarget(): Vec | null {
@@ -323,7 +400,10 @@ export default function Game() {
         npc.panicUntil = perf + NPC_PANIC_MS;
       }
       ghost.frozenUntil = perf + ATTACK_RECOVER;
-      ghost.nextAttackAt = perf + ATTACK_RECOVER + ATTACK_MIN + Math.random() * (ATTACK_MAX - ATTACK_MIN);
+      // later tiers attack more often
+      const late = perf - startPerf >= 240000;
+      const iv = late ? 30000 + Math.random() * 20000 : ATTACK_MIN + Math.random() * (ATTACK_MAX - ATTACK_MIN);
+      ghost.nextAttackAt = perf + ATTACK_RECOVER + iv;
       shake = isTouchRef.current ? 22 : 10; // stronger physical kick on mobile
       if (isTouchRef.current && navigator.vibrate) navigator.vibrate([200, 100, 200]);
     }
@@ -335,6 +415,53 @@ export default function Game() {
       const foundCount = api.foundCount;
       const distracted = perf < ghost.distractUntil;
       const frozen = perf < ghost.frozenUntil;
+
+      // ---- pacing clock: grace period + tension tiers ----
+      if (startPerf < 0) { startPerf = perf; warmupUntil = perf + 2200; }
+      const elapsed = perf - startPerf;
+      const grace = elapsed < 30000; // first 30s: explore freely
+      const tier = grace ? 0 : elapsed < 120000 ? 1 : elapsed < 240000 ? 2 : 3;
+      if (!graceEnded && !grace) {
+        graceEnded = true;
+        playBoom(); // distant sound — the house wakes up
+        ghost.nextAttackAt = perf + 60000 + Math.random() * 30000;
+        stingAt = perf + 90000 + Math.random() * 60000;
+      }
+
+      // ---- hold breath (mutes mic detection for up to 4s, 20s cooldown) ----
+      if (holding) {
+        breathMeter -= dt / 4;
+        muteMic(200, perf);
+        if (!breathHoldRef.current || breathMeter <= 0) { breathMeter = Math.max(0, breathMeter); holding = false; breathCdUntil = perf + 20000; }
+      } else {
+        if (perf >= breathCdUntil) breathMeter = 1;
+        if (breathHoldRef.current && micActive() && perf >= breathCdUntil && breathMeter > 0.99 && !dialogueRef.current) holding = true;
+      }
+      if (breathRingRef.current) {
+        let frac: number, color: string;
+        if (holding) { frac = breathMeter; color = "#6cc0ff"; }
+        else if (perf < breathCdUntil) { frac = 1 - (breathCdUntil - perf) / 20000; color = "#666"; }
+        else { frac = 1; color = "#6cc0ff"; }
+        breathRingRef.current.style.background = `conic-gradient(${color} ${frac * 360}deg, rgba(255,255,255,0.08) 0deg)`;
+      }
+
+      // ---- mic detection: sample loudness every 100ms ----
+      if (micActive() && perf > micCheckAt) {
+        micCheckAt = perf + 100;
+        const vol = micVolume(perf); // 0 while muted (holding breath)
+        micLevel = vol;
+        if (vol > 0.03) micLastSound = perf;
+        if (!grace && !hidingRef.current) {
+          if (vol > MIC_THRESHOLD) {
+            ghost.mode = "hunt"; ghost.behavior = "move";
+            micHuntUntil = perf + 8000; // stays in hunt at least 8s
+            micHeardUntil = perf + 2000; micFlash = 1;
+            // MULTIPLAYER MIC: emit this player's mic-trigger over Socket.io here
+          } else if (vol > MIC_WARNING) {
+            if (perf > micStaticAt) { micStaticAt = perf + 700; playStatic(); } // she's close
+          }
+        }
+      }
 
       // player movement (frozen while reading dialogue or hiding)
       let mx = (input.right ? 1 : 0) - (input.left ? 1 : 0) + input.jx;
@@ -392,18 +519,38 @@ export default function Game() {
           resolve(npc, NPC_R, walls);
         }
         if (npc.guttering > 0) npc.guttering -= dt;
-        // NPC scoops clues it walks over
+        // NPC scoops clues it walks over (but not the channelled basement clue)
         for (const c of CLUE_OBJECTS) {
-          if (api.foundIds.has(c.id)) continue;
+          if (c.id === BASEMENT_CLUE_ID || api.foundIds.has(c.id)) continue;
           if (dist(npc.x, npc.y, c.x, c.y) < HIDE_RANGE) if (api.findClue(c.id)) onCluePickedUp();
         }
       }
       for (let i = npcTrail.length - 1; i >= 0; i--) { npcTrail[i].life -= dt; if (npcTrail[i].life <= 0) npcTrail.splice(i, 1); }
 
+      // ---- basement clue: must linger 5s to read it ----
+      const bc = CLUE_OBJECTS.find((o) => o.id === BASEMENT_CLUE_ID)!;
+      if (!api.foundIds.has(BASEMENT_CLUE_ID) && !hidingRef.current && !dialogueRef.current &&
+        dist(player.x, player.y, bc.x, bc.y) < HIDE_RANGE + 10) {
+        reading += dt;
+        if (reading >= BASEMENT_READ_SECS) {
+          reading = 0;
+          if (api.findClue(BASEMENT_CLUE_ID)) { onCluePickedUp(); openDialogue(CLUE_DIALOGUE[BASEMENT_CLUE_ID], { text: CLUE_NOTE[BASEMENT_CLUE_ID], x: bc.x, y: bc.y }); }
+        }
+      } else reading = Math.max(0, reading - dt * 2);
+
       // ---- ghost ----
-      updateAttack();
+      if (!grace && tier >= 2) updateAttack();
       const hideSearchActive = hidingRef.current && (ghost.hideSearchT += dt) > HIDE_SEARCH_MS;
-      if (distracted) {
+
+      // tension-scaled parameters
+      const speedMul = [0, 0.85, 1.05, 1.32][tier] * (1 + GHOST_SPEED_PER_CLUE * foundCount);
+      const detectR = [0, 200, 250, 320][tier];
+      const idleMin = [0, 4, 3, 2][tier], idleMax = [0, 8, 6, 4][tier];
+      const roamSpeed = GHOST_ROAM * speedMul, huntSpeed = GHOST_HUNT * speedMul;
+
+      if (grace) {
+        ghost.mode = "roam"; ghost.behavior = "idle"; // completely still in the basement
+      } else if (distracted) {
         if (!hidingRef.current && dist(ghost.x, ghost.y, player.x, player.y) < dist(ghost.x, ghost.y, npc.x, npc.y)) {
           ghost.distractUntil = perf;
         } else if (!frozen) { moveToward(ghost, npc, 36, dt); ghost.mode = "roam"; }
@@ -411,29 +558,52 @@ export default function Game() {
         const tgt = ghostTarget();
         if (tgt) {
           const d = dist(ghost.x, ghost.y, tgt.x, tgt.y);
-          if (ghost.mode === "roam") { if (d < GHOST_DETECT || (player.idle > 18 && !hidingRef.current)) ghost.mode = "hunt"; }
+          if (ghost.mode === "roam") { if (d < detectR || (player.idle > 18 && !hidingRef.current)) { ghost.mode = "hunt"; ghost.behavior = "move"; } }
           else if (d > GHOST_LOSE) { ghost.lose += dt; if (ghost.lose > 3) { ghost.mode = "roam"; ghost.lose = 0; } }
           else ghost.lose = 0;
         } else ghost.mode = "roam";
+        // mic trigger keeps it hunting toward you regardless of distance
+        if (perf < micHuntUntil && tgt) { ghost.mode = "hunt"; ghost.behavior = "move"; }
 
-        let aim: Vec;
-        if (hideSearchActive && playerSpot) { aim = playerSpot; ghost.mode = "roam"; }
-        else if (ghost.mode === "hunt" && tgt) aim = tgt;
-        else {
-          if (perf > ghost.patrolUntil) {
-            ghost.patrolUntil = perf + 3000 + Math.random() * 2000;
-            const bPending = foundCount >= 2 && !api.foundIds.has("clue-elara");
-            ghost.patrol = Math.random() < (bPending ? 0.6 : 0.3)
-              ? { x: 0, y: 400 }
-              : tgt ?? ROOM_CENTER[ROOMS[Math.floor(Math.random() * 3)].id];
-          }
-          aim = ghost.patrol;
-        }
         if (!frozen) {
-          const speed = (ghost.mode === "hunt" ? GHOST_HUNT : GHOST_ROAM) * (1 + GHOST_SPEED_PER_CLUE * foundCount);
-          let ang = Math.atan2(aim.y - ghost.y, aim.x - ghost.x);
-          if (ghost.mode === "roam") ang += Math.sin(perf * 0.0018 + ghost.seed) * 0.5;
-          ghost.x += Math.cos(ang) * speed * dt; ghost.y += Math.sin(ang) * speed * dt;
+          if (hideSearchActive && playerSpot) {
+            ghost.mode = "roam"; ghost.behavior = "move";
+            moveToward(ghost, playerSpot, roamSpeed, dt);
+          } else if (ghost.mode === "hunt" && tgt) {
+            moveToward(ghost, tgt, huntSpeed, dt);
+          } else {
+            // ---- roam: patrol path + idle "listening" + sudden dash ----
+            const gRoom = roomOf(ghost.x, ghost.y) ?? "foyer";
+            if (ghost.behavior === "idle") {
+              if (perf > ghost.behaviorUntil) {
+                if (Math.random() < 0.5) ghost.behavior = "move"; // resume
+                else { // sudden dash one room over
+                  ghost.behavior = "dash";
+                  const nb = NEIGHBORS[gRoom] ?? ["foyer"];
+                  ghost.dashTarget = ROOM_CENTER[nb[Math.floor(Math.random() * nb.length)]];
+                }
+              }
+            } else if (ghost.behavior === "dash") {
+              moveToward(ghost, ghost.dashTarget, huntSpeed * 1.35, dt);
+              if (dist(ghost.x, ghost.y, ghost.dashTarget.x, ghost.dashTarget.y) < 26) ghost.behavior = "move";
+            } else {
+              const target = ROOM_CENTER[ghost.patrolPath[ghost.patrolIdx] ?? "foyer"];
+              moveToward(ghost, target, roamSpeed, dt);
+              if (dist(ghost.x, ghost.y, target.x, target.y) < 44) {
+                if (Math.random() < 0.55) { ghost.behavior = "idle"; ghost.behaviorUntil = perf + (idleMin + Math.random() * (idleMax - idleMin)) * 1000; }
+                else ghost.patrolIdx = (ghost.patrolIdx + 1) % ghost.patrolPath.length;
+              }
+              // break pattern — patrol tightens toward you as tension climbs
+              if (perf > ghost.breakAt) {
+                ghost.breakAt = perf + (tier >= 3 ? 8000 : 14000) + Math.random() * 6000;
+                const pRoom = roomOf(player.x, player.y);
+                const bPending = foundCount >= 2 && !api.foundIds.has(BASEMENT_CLUE_ID);
+                const tighten = [0, 0.15, 0.45, 0.7][tier];
+                if (bPending && Math.random() < 0.5) ghost.patrolPath[ghost.patrolIdx] = "basement";
+                else if (pRoom && Math.random() < tighten) ghost.patrolPath[ghost.patrolIdx] = pRoom;
+              }
+            }
+          }
         }
 
         if (!hidingRef.current && dist(ghost.x, ghost.y, player.x, player.y) < CATCH_DIST) triggerEnd("caught");
@@ -462,25 +632,31 @@ export default function Game() {
           if (dim !== lastDim) { lastDim = dim; setDlgDim(dim); }
         }
       }
-      if (!hidingRef.current && pd < WARN_DIST) danger = Math.min(danger + dt, DANGER_SECS + 0.01);
+      if (!grace && !hidingRef.current && pd < WARN_DIST) danger = Math.min(danger + dt, DANGER_SECS + 0.01);
       else danger = Math.max(danger - dt * 0.8, 0);
       if (danger >= DANGER_SECS) triggerEnd("caught");
       if (api.allFound && !hidingRef.current && player.y < -198 && Math.abs(player.x) < DOOR) triggerEnd("escape");
 
-      // ---- audio ----
+      // ---- audio (paced) ----
       const prox = clamp((300 - pd) / 300, 0, 1);
-      heartbeatUpdate(Math.max(danger / DANGER_SECS, prox * 0.85));
-      footstepUpdate(clamp((360 - pd) / 360, 0, 1) * (moved > 0.4 ? 1 : 0.4));
+      heartbeatUpdate(grace ? 0 : Math.max(danger / DANGER_SECS, prox * 0.85));
+      footstepUpdate(clamp((300 - pd) / 300, 0, 1) * (moved > 0.4 ? 1 : 0.3)); // only within 300px
       breathingUpdate(hidingRef.current);
-      if (perf > lullabyNext) { lullabyNext = perf + 14000 + Math.random() * 9000; playLullaby(); }
+      if (!grace && perf > lullabyNext) {
+        lullabyNext = perf + 16000 + Math.random() * 10000;
+        playLullaby(0.018 + [0, 0.018, 0.038, 0.06][tier]); // humming grows louder over time
+      }
       const gRoom = roomOf(ghost.x, ghost.y), pRoom = roomOf(player.x, player.y);
-      if (gRoom && gRoom !== ghostRoomPrev && gRoom === pRoom) playStatic();
+      if (!grace && gRoom && gRoom !== ghostRoomPrev && gRoom === pRoom) playStatic();
       ghostRoomPrev = gRoom;
+      // random jumpscare sting even when far — at most once per ~90s
+      if (!grace && stingAt > 0 && perf > stingAt) { playSting(); stingAt = perf + 90000 + Math.random() * 60000; }
 
       if (pingT > 0) pingT -= dt;
       if (caughtFx > 0) caughtFx -= dt * 1.4;
       if (whiteFlash > 0) whiteFlash -= dt * 4;
       if (attackFlash > 0) attackFlash -= dt * 2;
+      if (micFlash > 0) micFlash -= dt * 2;
       for (let i = notes.length - 1; i >= 0; i--) if (perf - notes[i].t > 4000) notes.splice(i, 1);
 
       pushHud();
@@ -501,9 +677,15 @@ export default function Game() {
       else if (npc.selected) text = "Tap a room to send the investigator";
       else {
         let near = false;
-        for (const c of CLUE_OBJECTS) { if (api.foundIds.has(c.id)) continue; if (dist(player.x, player.y, c.x, c.y) < HIDE_RANGE + 6) { near = true; break; } }
+        for (const c of CLUE_OBJECTS) { if (c.id === BASEMENT_CLUE_ID || api.foundIds.has(c.id)) continue; if (dist(player.x, player.y, c.x, c.y) < HIDE_RANGE + 6) { near = true; break; } }
+        if (!near && !herringRead && dist(player.x, player.y, HERRING.x, HERRING.y) < HIDE_RANGE + 6) near = true;
+        const bco = CLUE_OBJECTS.find((o) => o.id === BASEMENT_CLUE_ID)!;
+        const bNear = !api.foundIds.has(BASEMENT_CLUE_ID) && dist(player.x, player.y, bco.x, bco.y) < HIDE_RANGE + 10;
+        const decoyNear = !near && DECOYS.some((d) => dist(player.x, player.y, d.x, d.y) < HIDE_RANGE + 6);
         const spot = HIDE_SPOTS.find((s) => dist(player.x, player.y, s.x, s.y) < HIDE_RANGE);
         if (near) { text = isTouchRef.current ? "Tap to inspect" : "Press E to inspect"; act = true; }
+        else if (decoyNear) { text = isTouchRef.current ? "Tap to open" : "Press E to open"; act = true; }
+        else if (bNear) { text = reading > 0.15 ? "Reading the wall…" : "Stay still to read the wall"; }
         else if (spot) { text = isTouchRef.current ? "Tap E to hide" : "Press E to hide"; act = true; }
         else if (dist(player.x, player.y, EXIT_POS.x, EXIT_POS.y) < 90) {
           if (api.allFound) { text = isTouchRef.current ? "Tap to escape" : "Press E to escape"; act = true; }
@@ -552,6 +734,7 @@ export default function Game() {
         ctx.fillStyle = g; ctx.fillRect(sx - 30, sy - 30, 60, 60);
         ctx.fillStyle = `rgba(255,240,200,${0.7 + 0.3 * pulse})`; ctx.beginPath(); ctx.arc(sx, sy, 4.5, 0, Math.PI * 2); ctx.fill();
       }
+      drawProps(ox, oy);
       drawGhost(ox, oy);
       drawPlayer(px, py);
 
@@ -564,6 +747,12 @@ export default function Game() {
         ctx.fillStyle = "#000"; ctx.fillRect(0, 0, view.w, view.h);
       } else {
         let l = CONE_LEN;
+        // warm-up: the flashlight sputters on at game start
+        if (perf < warmupUntil) {
+          const w = clamp(1 - (warmupUntil - perf) / 2200, 0, 1);
+          l *= 0.2 + 0.8 * w;
+          if (Math.random() < 0.45 * (1 - w)) { l *= 0.4; if (Math.random() < 0.2) playBuzz(); }
+        }
         if (pd < FLICKER_DIST) {
           const f = 1 - pd / FLICKER_DIST;
           if (Math.random() < 0.05 + 0.2 * f) { l *= 0.25 + Math.random() * 0.4; if (Math.random() < 0.25) playBuzz(); }
@@ -605,7 +794,53 @@ export default function Game() {
       drawNpc(ox, oy);
       drawNotes(ox, oy);
       if (pingT > 0) drawPing(ox, oy, px, py);
+      // holding breath dims the screen slightly
+      if (holding) { ctx.fillStyle = "rgba(0,0,0,0.22)"; ctx.fillRect(0, 0, view.w, view.h); }
+      drawMic();
       if (caughtFx > 0) { ctx.fillStyle = `rgba(255,30,30,${Math.min(caughtFx, 1) * 0.75})`; ctx.fillRect(0, 0, view.w, view.h); }
+    }
+
+    function drawMic() {
+      if (!micActive()) return;
+      const cx = view.w / 2, y = 30;
+      // desktop breath meter (mobile uses the button ring)
+      if (!isTouchRef.current) {
+        let bf = -1, bc = "";
+        if (holding) { bf = breathMeter; bc = "#6cc0ff"; }
+        else if (perf < breathCdUntil) { bf = 1 - (breathCdUntil - perf) / 20000; bc = "#666"; }
+        if (bf >= 0) {
+          ctx.fillStyle = "rgba(255,255,255,0.1)"; ctx.fillRect(cx - 22, y + 26, 44, 4);
+          ctx.fillStyle = bc; ctx.fillRect(cx - 22, y + 26, 44 * bf, 4);
+        }
+      }
+      const silent = perf - micLastSound > 3000;
+      const fade = silent ? Math.max(0, 1 - (perf - micLastSound - 3000) / 800) : 1;
+      const a = Math.max(fade, micFlash);
+      if (a > 0.01) {
+        const triggered = perf < micHuntUntil;
+        const color = triggered || micLevel >= MIC_THRESHOLD ? "#ff3030"
+          : micLevel >= MIC_WARNING ? "#ffcc33" : "#46d27a";
+        const x = cx + (triggered ? (Math.random() - 0.5) * 5 : 0);
+        ctx.save();
+        ctx.globalAlpha = a;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(x - 5, y - 12, 10, 16, 5); else ctx.rect(x - 5, y - 12, 10, 16);
+        ctx.fill();
+        ctx.strokeStyle = color; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(x, y - 2, 8, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x, y + 6); ctx.lineTo(x, y + 11); ctx.stroke();
+        ctx.restore();
+      }
+      if (perf < micHeardUntil) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, (micHeardUntil - perf) / 600);
+        ctx.fillStyle = "#ff3030";
+        ctx.font = "bold 15px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("SHE HEARD YOU", cx, y + 52);
+        ctx.restore();
+      }
     }
 
     function drawNotes(ox: number, oy: number) {
@@ -624,6 +859,35 @@ export default function Game() {
         ctx.fillStyle = "rgba(232,222,198,0.96)";
         ctx.fillText(n.text, x, y + 2);
         ctx.restore();
+      }
+    }
+
+    function drawProps(ox: number, oy: number) {
+      // fake drawers — open them, find nothing
+      for (const d of DECOYS) {
+        const x = d.x + ox, y = d.y + oy;
+        ctx.fillStyle = "rgba(38,38,48,0.55)";
+        ctx.fillRect(x - 10, y - 7, 20, 14);
+        ctx.strokeStyle = "rgba(150,150,175,0.3)"; ctx.lineWidth = 1.5;
+        ctx.strokeRect(x - 10, y - 7, 20, 14);
+        ctx.fillStyle = "rgba(150,150,175,0.4)"; ctx.fillRect(x - 3, y - 1, 6, 2);
+      }
+      // red herring — disguised as a clue until inspected
+      if (!herringRead) {
+        const sx = HERRING.x + ox, sy = HERRING.y + oy, pulse = 0.55 + 0.45 * Math.sin(perf * 0.005 + HERRING.x);
+        const g = ctx.createRadialGradient(sx, sy, 0, sx, sy, 30);
+        g.addColorStop(0, `rgba(255,228,150,${0.55 * pulse})`); g.addColorStop(0.5, `rgba(220,150,60,${0.28 * pulse})`); g.addColorStop(1, "rgba(220,150,60,0)");
+        ctx.fillStyle = g; ctx.fillRect(sx - 30, sy - 30, 60, 60);
+        ctx.fillStyle = `rgba(255,240,200,${0.7 + 0.3 * pulse})`; ctx.beginPath(); ctx.arc(sx, sy, 4.5, 0, Math.PI * 2); ctx.fill();
+      }
+      // basement clue channel ring
+      if (reading > 0 && !clueRef.current.foundIds.has(BASEMENT_CLUE_ID)) {
+        const bco = CLUE_OBJECTS.find((o) => o.id === BASEMENT_CLUE_ID)!;
+        const sx = bco.x + ox, sy = bco.y + oy, frac = reading / BASEMENT_READ_SECS;
+        ctx.strokeStyle = "rgba(60,60,70,0.6)"; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(sx, sy, 22, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = "rgba(255,228,150,0.9)"; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(sx, sy, 22, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2); ctx.stroke();
       }
     }
 
@@ -660,8 +924,10 @@ export default function Game() {
     }
 
     function drawGhost(ox: number, oy: number) {
-      const gx = ghost.x + ox, gy = ghost.y + oy;
       const charging = ghost.attackState === "charging";
+      const idle = ghost.behavior === "idle" && !charging;
+      const gx = ghost.x + ox + (idle ? Math.sin(perf * 0.005) * 4 : 0); // sways while listening
+      const gy = ghost.y + oy;
       const prog = charging ? clamp(1 - (ghost.chargeUntil - perf) / ATTACK_CHARGE, 0, 1) : 0;
       const scale = 1 + prog * 0.5;
       // motion blur
@@ -686,9 +952,9 @@ export default function Game() {
       }
       ctx.fillStyle = charging ? "rgba(55,0,0,0.95)" : "rgba(8,4,8,0.95)";
       ctx.beginPath(); ctx.arc(gx, headY, headR, 0, Math.PI * 2); ctx.fill();
-      // hollow red eyes
-      const eg = 0.5 + 0.5 * Math.sin(perf * 0.02);
-      ctx.fillStyle = `rgba(255,40,40,${0.6 + 0.4 * eg})`;
+      // hollow red eyes — glow brighter while idle/listening
+      const eg = idle ? 0.95 : 0.5 + 0.5 * Math.sin(perf * 0.02);
+      ctx.fillStyle = `rgba(255,${idle ? 60 : 40},40,${0.6 + 0.4 * eg})`;
       ctx.beginPath(); ctx.ellipse(gx - 4.5 * scale, headY - 1, 2.4 * scale, 3.4 * scale, 0, 0, Math.PI * 2); ctx.fill();
       ctx.beginPath(); ctx.ellipse(gx + 4.5 * scale, headY - 1, 2.4 * scale, 3.4 * scale, 0, 0, Math.PI * 2); ctx.fill();
       if (charging) {
@@ -756,7 +1022,8 @@ export default function Game() {
     function frame(now: number) {
       perf = now;
       const dt = Math.min((now - last) / 1000, 0.033); last = now;
-      if (!ended) update(dt); else { silenceAll(); }
+      if (!ended && !introRef.current) update(dt);
+      else if (ended) silenceAll();
       render();
       // physical screen shake (stronger on mobile)
       if (shake > 0.3) {
@@ -779,6 +1046,7 @@ export default function Game() {
     const onKeyDown = (e: KeyboardEvent) => {
       ensureAudio();
       if (dialogueRef.current) return; // DialogueBox owns the keys
+      if (e.code === "Space") { breathHoldRef.current = true; e.preventDefault(); return; } // hold breath
       switch (e.key) {
         case "w": case "W": case "ArrowUp": input.up = true; e.preventDefault(); break;
         case "s": case "S": case "ArrowDown": input.down = true; e.preventDefault(); break;
@@ -789,6 +1057,7 @@ export default function Game() {
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") { breathHoldRef.current = false; return; }
       switch (e.key) {
         case "w": case "W": case "ArrowUp": input.up = false; break;
         case "s": case "S": case "ArrowDown": input.down = false; break;
@@ -844,7 +1113,7 @@ export default function Game() {
 
     raf = requestAnimationFrame(frame);
     return () => {
-      cancelAnimationFrame(raf); silenceAll();
+      cancelAnimationFrame(raf); silenceAll(); stopMic();
       window.removeEventListener("resize", resize);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
@@ -902,11 +1171,40 @@ export default function Game() {
         </>
       )}
 
+      {/* mobile hold-breath button — only while the mic is live */}
+      {isTouch && micOn && !hiding && (
+        <button
+          type="button"
+          className="breath-btn"
+          onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); breathHoldRef.current = true; }}
+          onPointerUp={(e) => { e.preventDefault(); e.stopPropagation(); breathHoldRef.current = false; }}
+          onPointerLeave={() => { breathHoldRef.current = false; }}
+          onPointerCancel={() => { breathHoldRef.current = false; }}
+        >
+          <div className="breath-btn__ring" ref={breathRingRef} />
+          <span className="breath-btn__label">HOLD<br />BREATH</span>
+        </button>
+      )}
+
       {dialogue && !showEnd && (
         <DialogueBox lines={dialogue} dim={dlgDim} onClose={() => closeDialogueRef.current()} />
       )}
 
       <ClueStack clues={clues.found} total={clues.total} />
+
+      {!micAsked && (
+        <MicPrompt onResult={(allowed) => { setMicOn(allowed); setMicAsked(true); }} />
+      )}
+
+      {micAsked && intro && (
+        <IntroSequence
+          onDone={() => { introRef.current = false; setIntro(false); }}
+        />
+      )}
+
+      {death && !showEnd && (
+        <DeathSequence onDone={() => { setDeath(false); setShowEnd(true); }} />
+      )}
 
       {showEnd && <EndScreen variant={ending} timeLabel={fmtTime(timeSec)} onContinue={() => navigate("/")} />}
 
