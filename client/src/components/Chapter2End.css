@@ -1,0 +1,68 @@
+.ch2end {
+  position: fixed;
+  inset: 0;
+  z-index: 78;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  text-align: center;
+}
+
+.ch2end--finale {
+  background: radial-gradient(circle at 50% 45%, #160606 0%, #050505 78%);
+  color: #e6dcc4;
+}
+.ch2end__line {
+  max-width: 32rem;
+  font-family: ui-serif, Georgia, serif;
+  font-size: clamp(1.1rem, 4.5vw, 1.5rem);
+  line-height: 1.6;
+  animation: ch2Line 2.6s ease both;
+}
+@keyframes ch2Line { 0% { opacity: 0; } 25%, 80% { opacity: 1; } 100% { opacity: 0.2; } }
+
+.ch2end--white {
+  background: #fff;
+  animation: ch2White 1.8s ease both;
+}
+@keyframes ch2White { from { background: #050505; } to { background: #fff; } }
+
+.ch2end--credits {
+  background: #050505;
+  color: #c9c9c9;
+  overflow-y: auto;
+  animation: ch2Fade 1.4s ease both;
+}
+@keyframes ch2Fade { from { opacity: 0; } to { opacity: 1; } }
+
+.ch2end__scroll { max-width: 30rem; display: flex; flex-direction: column; gap: 0.5rem; padding: 3rem 0; }
+.ch2end__scroll h2 { font-size: clamp(1.1rem, 5vw, 1.6rem); letter-spacing: 0.08em; color: #e7d9d9; margin: 0 0 1rem; }
+.ch2end__scroll h3 { margin: 1.6rem 0 0.3rem; font-size: 0.8rem; letter-spacing: 0.3em; color: #ff6a6a; }
+.ch2end__scroll p { margin: 0.15rem 0; font-family: ui-serif, Georgia, serif; color: rgba(201, 201, 201, 0.85); }
+.ch2end__dim { color: rgba(201, 201, 201, 0.45) !important; font-size: 0.8rem; letter-spacing: 0.2em; text-transform: uppercase; }
+.ch2end__red { color: #ff4444 !important; }
+
+.ch2end__secret { margin: 1.4rem 0; display: flex; flex-direction: column; align-items: center; gap: 0.3rem; }
+.ch2end__girl {
+  width: 26px; height: 64px; border-radius: 40% 40% 30% 30%;
+  background: linear-gradient(180deg, rgba(220, 220, 235, 0.5), rgba(180, 180, 200, 0.1));
+  animation: ch2Girl 3s ease forwards;
+}
+@keyframes ch2Girl { 0% { opacity: 0; transform: translateY(8px); } 30%, 70% { opacity: 0.8; } 100% { opacity: 0; } }
+
+.ch2end__hands { display: flex; gap: 2rem; justify-content: center; margin: 1.6rem 0; }
+.ch2end__hand {
+  width: 40px; height: 52px; border-radius: 40% 40% 30% 30%;
+  background: radial-gradient(circle at 50% 30%, rgba(139, 0, 0, 0.7), rgba(60, 0, 0, 0.25));
+  filter: blur(0.5px);
+}
+.ch2end__hand--child { width: 26px; height: 34px; align-self: flex-end; }
+
+.ch2end__btn {
+  margin-top: 2rem;
+  padding: 0.8rem 1.8rem;
+  background: linear-gradient(180deg, #8b0000, #5e0000);
+  border: 1px solid #b00000; border-radius: 3px;
+  color: #f3e9e9; letter-spacing: 0.2em; text-transform: uppercase; font-size: 0.85rem;
+  cursor: pointer;
+}

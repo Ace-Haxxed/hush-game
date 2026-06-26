@@ -294,6 +294,77 @@
   box-shadow: 0 0 18px rgba(255, 51, 51, 0.35);
 }
 
+/* smaller grey outline "How To Play" between the mains */
+.home__btn--how {
+  flex: 0 0 auto;
+  padding: 0.7rem 1rem;
+  font-size: 0.78rem;
+  background: transparent;
+  color: rgba(201, 201, 201, 0.7);
+  border: 1px solid rgba(201, 201, 201, 0.3);
+}
+.home__btn--how:hover {
+  color: #c9c9c9;
+  border-color: rgba(201, 201, 201, 0.6);
+}
+
+/* ----------------------------------------------------------- chapter select */
+.home__chapters {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: clamp(0.75rem, 3vw, 1.25rem);
+  justify-content: center;
+  margin-top: clamp(1.5rem, 5vw, 2.5rem);
+  width: 100%;
+  max-width: 34rem;
+}
+.chapter-card {
+  flex: 1 1 13rem;
+  min-width: 11rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 1rem 1rem 1.1rem;
+  background: rgba(17, 17, 17, 0.7);
+  border: 1px solid rgba(139, 0, 0, 0.5);
+  border-radius: 6px;
+  color: #c9c9c9;
+  cursor: pointer;
+  backdrop-filter: blur(2px);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+.chapter-card:hover:not(:disabled) {
+  border-color: #ff3333;
+  box-shadow: 0 0 22px rgba(139, 0, 0, 0.45);
+  transform: translateY(-2px);
+}
+.chapter-card__icon { font-size: 1.6rem; }
+.chapter-card__no {
+  font-size: 0.62rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: rgba(201, 201, 201, 0.5);
+}
+.chapter-card__title {
+  font-family: ui-serif, Georgia, serif;
+  font-size: 1.05rem;
+  color: #e7d9d9;
+}
+.chapter-card--locked {
+  cursor: default;
+  opacity: 0.55;
+  border-color: rgba(120, 120, 120, 0.4);
+}
+.chapter-card__hint {
+  margin-top: 0.2rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  color: rgba(201, 201, 201, 0.4);
+}
+
 /* ----------------------------------------------------------------------------
    Footer — chapter line
 ---------------------------------------------------------------------------- */

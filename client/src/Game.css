@@ -41,11 +41,12 @@
   border-color: #ff3333;
 }
 
-/* count-up timer (top-right) */
+/* count-up timer (top-center) */
 .timer {
   position: absolute;
   top: clamp(0.75rem, 3vw, 1.5rem);
-  right: clamp(0.75rem, 3vw, 1.5rem);
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 10;
   padding: 0.4rem 0.8rem;
   background: rgba(10, 10, 10, 0.6);
@@ -114,12 +115,11 @@
   background: rgba(40, 70, 110, 0.6);
 }
 
-/* HUD clue counter */
+/* HUD clue counter (top-left, below the leave button) */
 .hud-clues {
   position: absolute;
-  top: clamp(0.75rem, 3vw, 1.5rem);
-  left: 50%;
-  transform: translateX(-50%);
+  top: clamp(3.4rem, 11vw, 4.2rem);
+  left: clamp(0.75rem, 3vw, 1.5rem);
   z-index: 10;
   display: flex;
   align-items: center;
@@ -264,6 +264,106 @@
   0%, 100% { box-shadow: 0 0 0 0 rgba(255, 51, 51, 0.5); border-color: #ff3333; }
   50% { box-shadow: 0 0 0 14px rgba(255, 51, 51, 0); border-color: #ff6a6a; }
 }
+
+/* ------------------------------------------------ mic indicator (top-right) */
+.mic-ind {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 16;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: opacity 150ms ease;
+  --mic: #444444;
+}
+.mic-ind[data-state="warning"] { --mic: #ffcc00; }
+.mic-ind[data-state="detected"] { --mic: #ff2222; animation: micShake 0.25s linear infinite; }
+.mic-ind[data-state="breath"] { --mic: #aaddff; }
+
+@keyframes micShake {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(-1.5px, 1px); }
+  75% { transform: translate(1.5px, -1px); }
+}
+
+.mic-ind__bars {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 30px;
+}
+.mic-ind__bars span {
+  width: 3px;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--mic);
+  transform: scaleY(0.18);
+  transform-origin: center;
+  transition: background-color 150ms ease;
+}
+.mic-ind[data-state="breath"] .mic-ind__bars { opacity: 0; }
+
+.mic-ind__circle {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(17, 17, 17, 0.8);
+  border: 2px solid var(--mic);
+  display: grid;
+  place-items: center;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.mic-ind[data-state="warning"] .mic-ind__circle { box-shadow: 0 0 12px rgba(255, 204, 0, 0.5); }
+.mic-ind[data-state="detected"] .mic-ind__circle { box-shadow: 0 0 18px rgba(255, 34, 34, 0.8); }
+
+.mic-ind__icon {
+  width: 22px;
+  height: 22px;
+  fill: var(--mic);
+  stroke: var(--mic);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+.mic-ind__icon path { fill: none; }
+
+/* X through the icon while holding breath */
+.mic-ind__x {
+  position: absolute;
+  width: 30px;
+  height: 2px;
+  background: var(--mic);
+  transform: rotate(45deg);
+  opacity: 0;
+}
+.mic-ind[data-state="breath"] .mic-ind__x { opacity: 1; }
+
+.mic-ind__ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: conic-gradient(#aaddff 0deg, rgba(255, 255, 255, 0.08) 0deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 4px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 4px));
+  opacity: 0;
+  transition: opacity 150ms ease;
+  pointer-events: none;
+}
+
+.mic-ind__text {
+  position: absolute;
+  top: 54px;
+  right: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--mic);
+}
+.mic-ind__text[data-kind="heard"] { color: #ff2222; }
+.mic-ind__text[data-kind="breath"] { color: #aaddff; }
 
 /* mobile hold-breath button (bottom center, only while mic is live) */
 .breath-btn {

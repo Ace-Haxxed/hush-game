@@ -13,6 +13,8 @@
   to { opacity: 1; }
 }
 
+.death__eyes { display: flex; gap: clamp(30px, 12vw, 90px); }
+
 /* a single hollow red eye that opens, then locks on */
 .death__eye {
   position: relative;

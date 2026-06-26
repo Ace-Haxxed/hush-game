@@ -43,6 +43,50 @@ export const CHAPTER1_CLUES: ClueDef[] = [
   },
 ];
 
+/** Chapter 2: five photographs of what happened in the Alderton House. */
+export const CHAPTER2_PHOTOS: ClueDef[] = [
+  {
+    id: "photo-dinner",
+    title: "Family Dinner",
+    description: "A family dinner. An empty chair where Elara should sit. Oct 3 1987.",
+    location: "Kitchen",
+    glyph: "🍽",
+    tint: "#2a2418",
+  },
+  {
+    id: "photo-clippings",
+    title: "The Clippings",
+    description: "Daniel's wall, covered in newspaper clippings. One circled: LOCAL GIRL MISSING.",
+    location: "Daniel's Room",
+    glyph: "📰",
+    tint: "#26201a",
+  },
+  {
+    id: "photo-ruth",
+    title: "Ruth, Alone",
+    description: "Ruth sitting alone, staring at nothing. On the back: “She keeps calling me.”",
+    location: "Attic",
+    glyph: "👤",
+    tint: "#1c2026",
+  },
+  {
+    id: "photo-corner",
+    title: "The Corner",
+    description: "The corner where Elara was found. A small shoe. Nothing else.",
+    location: "Basement",
+    glyph: "👟",
+    tint: "#201618",
+  },
+  {
+    id: "photo-recent",
+    title: "Recently",
+    description: "The same corner — 2019 date stamp. The shoe is gone. Someone was here recently.",
+    location: "Crawl Space",
+    glyph: "📷",
+    tint: "#16181c",
+  },
+];
+
 export interface FoundClue extends ClueDef {
   /** Discovery order, starting at 0. */
   order: number;
@@ -65,7 +109,7 @@ export interface ClueSystem {
  * Owns the discovered-clue state for the current chapter. Discovering a new
  * clue plays the eerie Web Audio sting; re-inspecting a found clue is a no-op.
  */
-export function useClues(): ClueSystem {
+export function useClues(defs: ClueDef[] = CHAPTER1_CLUES): ClueSystem {
   const [found, setFound] = useState<FoundClue[]>([]);
 
   const foundIds = useMemo(
@@ -76,7 +120,7 @@ export function useClues(): ClueSystem {
   const findClue = useCallback(
     (id: string): boolean => {
       if (foundIds.has(id)) return false;
-      const def = CHAPTER1_CLUES.find((c) => c.id === id);
+      const def = defs.find((c) => c.id === id);
       if (!def) return false;
 
       setFound((prev) =>
@@ -87,18 +131,18 @@ export function useClues(): ClueSystem {
       playClueTone();
       return true;
     },
-    [foundIds]
+    [foundIds, defs]
   );
 
   const reset = useCallback(() => setFound([]), []);
 
   return {
-    defs: CHAPTER1_CLUES,
+    defs,
     found,
     foundIds,
     foundCount: found.length,
-    total: CHAPTER1_CLUES.length,
-    allFound: found.length === CHAPTER1_CLUES.length,
+    total: defs.length,
+    allFound: found.length === defs.length,
     findClue,
     isFound: (id: string) => foundIds.has(id),
     reset,

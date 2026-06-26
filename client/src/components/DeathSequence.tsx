@@ -4,15 +4,16 @@ import "./DeathSequence.css";
 
 interface DeathSequenceProps {
   onDone: () => void;
+  /** 1 = Elara only (Ch1), 2 = Elara + Ruth both found you (Ch2). */
+  eyes?: 1 | 2;
 }
 
 /**
- * The moment of being caught: black, her breathing, a single red eye opening
+ * The moment of being caught: black, her breathing, a red eye (or two) opening
  * in the dark, held for 3 seconds before the end screen.
  */
-export default function DeathSequence({ onDone }: DeathSequenceProps) {
+export default function DeathSequence({ onDone, eyes = 1 }: DeathSequenceProps) {
   useEffect(() => {
-    // drive the shaky breathing for the duration
     const iv = window.setInterval(() => breathingUpdate(true), 250);
     const done = window.setTimeout(onDone, 3000);
     return () => {
@@ -24,8 +25,9 @@ export default function DeathSequence({ onDone }: DeathSequenceProps) {
 
   return (
     <div className="death" role="dialog" aria-label="Caught">
-      <div className="death__eye" aria-hidden="true">
-        <span className="death__pupil" />
+      <div className={`death__eyes ${eyes === 2 ? "death__eyes--two" : ""}`} aria-hidden="true">
+        <div className="death__eye"><span className="death__pupil" /></div>
+        {eyes === 2 && <div className="death__eye"><span className="death__pupil" /></div>}
       </div>
     </div>
   );

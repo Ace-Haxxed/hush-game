@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import EndScreen from "./components/EndScreen";
 import DialogueBox from "./components/DialogueBox";
 import IntroSequence from "./components/IntroSequence";
 import DeathSequence from "./components/DeathSequence";
+import Chapter2End from "./components/Chapter2End";
 import MicPrompt from "./components/MicPrompt";
 import { ClueStack } from "./components/Clue";
-import { useClues } from "./game/useClues";
+import { useClues, CHAPTER1_CLUES, CHAPTER2_PHOTOS } from "./game/useClues";
 import {
   MIC_THRESHOLD,
   MIC_WARNING,
@@ -77,21 +78,64 @@ const STATIC_WALLS: Rect[] = [
 const EXIT_POS = { x: 0, y: -200 };
 const BASEMENT_DOOR = { x: 0, y: 200 };
 // spread out so the player has to actually explore each room
-const CLUE_OBJECTS = [
+const CLUE_OBJECTS_CH1 = [
   { id: "clue-musicbox", x: -720, y: -130 },
   { id: "clue-drawing", x: 720, y: 130 },
   { id: "clue-elara", x: 0, y: 545 },
 ];
-const BASEMENT_CLUE_ID = "clue-elara";
+const BASEMENT_CLUE_ID_CH1 = "clue-elara";
 const BASEMENT_READ_SECS = 5; // must linger in the basement to read it
 
+/** Chapter 2 — five photographs. Last one ("crawl space") is channelled. */
+const CLUE_OBJECTS_CH2 = [
+  { id: "photo-dinner", x: -520, y: 0 },
+  { id: "photo-clippings", x: 700, y: -120 },
+  { id: "photo-ruth", x: -150, y: -130 },
+  { id: "photo-corner", x: 0, y: 420 },
+  { id: "photo-recent", x: 0, y: 560 },
+];
+const CLUE_DIALOGUE_CH2: Record<string, string[]> = {
+  "photo-dinner": ["A photograph. Family dinner.", "There is an empty chair. Set, but empty.", "The date: October 3rd, 1987."],
+  "photo-clippings": ["Daniel's wall. Newspaper clippings, everywhere.", "One is circled, over and over.", "“LOCAL GIRL MISSING.”"],
+  "photo-ruth": ["Ruth, alone in the attic. Staring at nothing.", "On the back, in shaking hand:", "“She keeps calling me.”"],
+  "photo-corner": ["The basement corner. Where they found her.", "A small shoe. Nothing else.", "She was nine."],
+  "photo-recent": ["The same corner. But the stamp reads 2019.", "The shoe is gone.", "Someone was here. Recently."],
+};
+const CLUE_NOTE_CH2: Record<string, string> = {
+  "photo-dinner": "Family dinner — an empty chair",
+  "photo-clippings": "LOCAL GIRL MISSING — circled",
+  "photo-ruth": "Ruth: “She keeps calling me.”",
+  "photo-corner": "The corner. A small shoe.",
+  "photo-recent": "2019. The shoe is gone.",
+};
+const DECOYS_CH2: { x: number; y: number; text: string }[] = [
+  { x: 150, y: 150, text: "Water damage. The wall is soft." },
+  { x: -680, y: 120, text: "Broken glass. Don't touch it." },
+  { x: 680, y: 120, text: "A child's height marks. They stop at age 9." },
+  { x: -180, y: 320, text: "Mold. The whole corner is black with it." },
+];
+
 /** Fake drawers — open them, find nothing. Builds the explore habit. */
-const DECOYS: { x: number; y: number; text: string }[] = [
+const DECOYS_CH1: { x: number; y: number; text: string }[] = [
   { x: -150, y: -150, text: "An empty drawer." },
   { x: 170, y: 150, text: "Nothing but cobwebs." },
   { x: -680, y: 120, text: "Old receipts. Faded to nothing." },
   { x: 680, y: -120, text: "Just cutlery. Cold to the touch." },
   { x: -180, y: 320, text: "A coal scuttle. Empty." },
+];
+
+/** Decayed Chapter 2 room palette. */
+const CH2_FILLS: Record<string, string> = {
+  foyer: "#0c0b0a", kitchen: "#0b0c0b", study: "#0d0b0a", basement: "#0e0a0a",
+};
+
+/** Daniel's journal (Chapter 2): pages unlock as photographs are found. */
+const JOURNAL = { x: 700, y: 120 };
+const JOURNAL_PAGES = [
+  ["Daniel's journal.", "“I did what had to be done.”"],
+  ["“Mother never stopped hearing her.”"],
+  ["“I went back. I don't know why.”"],
+  ["“The shoe was still there.”", "“I took it.”", "“Maybe that was a mistake.”"],
 ];
 
 /** Red herring — reads like a clue, but it doesn't fit. */
@@ -107,7 +151,7 @@ const HIDE_SPOTS = [
   { id: "wardrobe", room: "study", x: 720, y: -150 },
   { id: "stairs", room: "foyer", x: -200, y: 150 },
 ];
-const CLUE_DIALOGUE: Record<string, string[]> = {
+const CLUE_DIALOGUE_CH1: Record<string, string[]> = {
   "clue-musicbox": [
     "...a music box. Who winds these up anymore?",
     "It only plays three notes before it stops.",
@@ -126,7 +170,7 @@ const CLUE_DIALOGUE: Record<string, string[]> = {
   ],
 };
 /** Short reminder that floats over the clue spot after the dialogue closes. */
-const CLUE_NOTE: Record<string, string> = {
+const CLUE_NOTE_CH1: Record<string, string> = {
   "clue-musicbox": "Music box — 3 notes, then silence",
   "clue-drawing": "Family portrait — one face crossed out",
   "clue-elara": "Scratched in the wall — ELARA",
@@ -159,7 +203,17 @@ function fmtTime(s: number): string {
 
 export default function Game() {
   const navigate = useNavigate();
-  const clues = useClues();
+  const params = useParams();
+  const chapter = params.chapter === "2" ? 2 : 1;
+  const isCh2 = chapter === 2;
+  // chapter-specific content (positions reused; defs/dialogue/notes swap)
+  const CLUE_OBJECTS = isCh2 ? CLUE_OBJECTS_CH2 : CLUE_OBJECTS_CH1;
+  const CLUE_DIALOGUE = isCh2 ? CLUE_DIALOGUE_CH2 : CLUE_DIALOGUE_CH1;
+  const CLUE_NOTE = isCh2 ? CLUE_NOTE_CH2 : CLUE_NOTE_CH1;
+  const DECOYS = isCh2 ? DECOYS_CH2 : DECOYS_CH1;
+  const BASEMENT_CLUE_ID = isCh2 ? "photo-recent" : BASEMENT_CLUE_ID_CH1;
+
+  const clues = useClues(isCh2 ? CHAPTER2_PHOTOS : CHAPTER1_CLUES);
   const clueRef = useRef(clues);
   clueRef.current = clues;
 
@@ -182,14 +236,21 @@ export default function Game() {
   const [dialogue, setDialogue] = useState<string[] | null>(null);
   const [dlgDim, setDlgDim] = useState(false);
   const [actPulse, setActPulse] = useState(false);
-  const [intro, setIntro] = useState(true);
+  // skip the cinematic intro if the player has already seen the tutorial
+  const tutSeen = typeof localStorage !== "undefined" && localStorage.getItem("hush_tutorial_seen") === "1";
+  const [intro, setIntro] = useState(!tutSeen);
   const [death, setDeath] = useState(false);
-  const introRef = useRef(true);
+  const [ch2End, setCh2End] = useState<null | { secret: boolean }>(null);
+  const introRef = useRef(!tutSeen);
   // mic gate: if unsupported, skip the prompt entirely (silently, no mic)
   const [micAsked, setMicAsked] = useState(() => !micSupported());
   const [micOn, setMicOn] = useState(false);
   const breathHoldRef = useRef(false);
   const breathRingRef = useRef<HTMLDivElement>(null);
+  const micIndRef = useRef<HTMLDivElement>(null);
+  const micBarsRef = useRef<(HTMLSpanElement | null)[]>([]);
+  const micRingRef = useRef<HTMLDivElement>(null);
+  const micTextRef = useRef<HTMLDivElement>(null);
   const [isTouch] = useState(
     () => typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches
   );
@@ -230,6 +291,8 @@ export default function Game() {
     const npcTrail: { x: number; y: number; life: number }[] = [];
     const footprints: { x: number; y: number; t: number; side: number }[] = [];
     const notes: { x: number; y: number; text: string; t: number }[] = [];
+    // Chapter 2: Ruth — slow, appears in doorways, dismissed by the flashlight
+    const ruth = { active: false, x: 0, y: 0, appearAt: 0, stareT: 0 };
 
     let danger = 0, pingT = 0, caughtFx = 0, whiteFlash = 0, attackFlash = 0, shake = 0;
     let ended = false, raf = 0, perf = 0, startPerf = -1;
@@ -298,7 +361,10 @@ export default function Game() {
         ghost.behavior = "move";
       }
     }
-    let herringRead = false;
+    let herringRead = isCh2; // Chapter 2 has no red herring (real photos)
+    let spokeName = false; // Chapter 2: did the player say ELARA out loud?
+    let journalRead = 0; // Chapter 2: Daniel's journal pages read
+    let elaraEnraged = false; // Chapter 2: after the last journal page
     function doInteract() {
       if (ended || dialogueRef.current || hidingRef.current) return;
       const api = clueRef.current;
@@ -322,6 +388,18 @@ export default function Game() {
           notes.push({ x: dq.x, y: dq.y, text: dq.text, t: perf });
           return;
         }
+      }
+      // Chapter 2: Daniel's journal (pages unlock as photographs are found)
+      if (isCh2 && dist(player.x, player.y, JOURNAL.x, JOURNAL.y) < HIDE_RANGE + 6) {
+        const avail = Math.min(api.foundCount, JOURNAL_PAGES.length);
+        if (journalRead < avail) {
+          openDialogue(JOURNAL_PAGES[journalRead], { text: "Daniel's journal", x: JOURNAL.x, y: JOURNAL.y });
+          journalRead++;
+          if (journalRead >= JOURNAL_PAGES.length) elaraEnraged = true; // she knows you found it
+        } else {
+          notes.push({ x: JOURNAL.x, y: JOURNAL.y, text: journalRead === 0 ? "Locked — find a photograph first" : "Nothing new... yet", t: perf });
+        }
+        return;
       }
       if (api.allFound && dist(player.x, player.y, EXIT_POS.x, EXIT_POS.y) < 80) triggerEnd("escape");
     }
@@ -353,10 +431,14 @@ export default function Game() {
       if (dialogueRef.current) { dialogueRef.current = false; setDialogue(null); }
       silenceAll();
       if (kind === "caught") {
-        // slow, earned death: DeathSequence handles breathing + the eye, then EndScreen
+        // slow, earned death: DeathSequence handles breathing + the eye(s)
         setEnding("caught");
         setDeath(true);
+      } else if (isCh2) {
+        // Chapter 2 finale (its own component handles the fade-to-white + credits)
+        setCh2End({ secret: spokeName });
       } else {
+        try { localStorage.setItem("hush_ch1_complete", "1"); } catch { /* ignore */ }
         playEndDrone();
         setEnding("escape");
         setShowEnd(true);
@@ -451,6 +533,8 @@ export default function Game() {
         const vol = micVolume(perf); // 0 while muted (holding breath)
         micLevel = vol;
         if (vol > 0.03) micLastSound = perf;
+        // Chapter 2 finale: shouting (her name) after finding everything counts
+        if (isCh2 && clueRef.current.allFound && vol > MIC_THRESHOLD) spokeName = true;
         if (!grace && !hidingRef.current) {
           if (vol > MIC_THRESHOLD) {
             ghost.mode = "hunt"; ghost.behavior = "move";
@@ -542,8 +626,8 @@ export default function Game() {
       if (!grace && tier >= 2) updateAttack();
       const hideSearchActive = hidingRef.current && (ghost.hideSearchT += dt) > HIDE_SEARCH_MS;
 
-      // tension-scaled parameters
-      const speedMul = [0, 0.85, 1.05, 1.32][tier] * (1 + GHOST_SPEED_PER_CLUE * foundCount);
+      // tension-scaled parameters (Ch2 journal-finale enrages Elara)
+      const speedMul = [0, 0.85, 1.05, 1.32][tier] * (1 + GHOST_SPEED_PER_CLUE * foundCount) * (elaraEnraged ? 1.25 : 1);
       const detectR = [0, 200, 250, 320][tier];
       const idleMin = [0, 4, 3, 2][tier], idleMax = [0, 8, 6, 4][tier];
       const roamSpeed = GHOST_ROAM * speedMul, huntSpeed = GHOST_HUNT * speedMul;
@@ -619,6 +703,37 @@ export default function Game() {
       ghost.prevX = ghost.x; ghost.prevY = ghost.y;
       for (let i = footprints.length - 1; i >= 0; i--) if (perf - footprints[i].t > FOOTPRINT_FADE) footprints.splice(i, 1);
 
+      // ---- Ruth (Chapter 2 only) ----
+      if (isCh2 && !grace) {
+        if (!ruth.active) {
+          if (perf > ruth.appearAt) {
+            const eRoom = roomOf(ghost.x, ghost.y);
+            const doors = Object.entries(DOORWAY).filter(([rid]) => rid !== eRoom);
+            const [, pos] = doors[Math.floor(Math.random() * doors.length)];
+            ruth.x = pos.x; ruth.y = pos.y; ruth.active = true; ruth.stareT = 0;
+          }
+        } else {
+          // appears more often as more photos are found
+          const cool = Math.max(5000, 16000 - clueRef.current.foundCount * 1800);
+          let ang = Math.atan2(ruth.y - player.y, ruth.x - player.x) - facing;
+          while (ang > Math.PI) ang -= 2 * Math.PI;
+          while (ang < -Math.PI) ang += 2 * Math.PI;
+          const rd = dist(ruth.x, ruth.y, player.x, player.y);
+          const lit = rd < CONE_LEN && Math.abs(ang) < CONE_HALF && !hidingRef.current && perf >= flashOutUntil;
+          const sameAsElara = roomOf(ruth.x, ruth.y) === roomOf(ghost.x, ghost.y);
+          if (lit || sameAsElara) { ruth.active = false; ruth.appearAt = perf + cool; ruth.stareT = 0; }
+          else if (rd < 78 && !hidingRef.current) {
+            ruth.stareT += dt;
+            if (ruth.stareT > 5) { // white-out + teleport
+              whiteFlash = 1.3;
+              const rc = ROOM_CENTER[ROOMS[Math.floor(Math.random() * 3)].id];
+              player.x = rc.x; player.y = rc.y;
+              ruth.active = false; ruth.appearAt = perf + cool; ruth.stareT = 0;
+            }
+          } else ruth.stareT = Math.max(0, ruth.stareT - dt);
+        }
+      }
+
       // ---- danger / win ----
       const pd = dist(ghost.x, ghost.y, player.x, player.y);
       // dialogue danger override: ghost too close → slam the box shut (keep clue)
@@ -683,14 +798,24 @@ export default function Game() {
         const bNear = !api.foundIds.has(BASEMENT_CLUE_ID) && dist(player.x, player.y, bco.x, bco.y) < HIDE_RANGE + 10;
         const decoyNear = !near && DECOYS.some((d) => dist(player.x, player.y, d.x, d.y) < HIDE_RANGE + 6);
         const spot = HIDE_SPOTS.find((s) => dist(player.x, player.y, s.x, s.y) < HIDE_RANGE);
+        const journalNear = isCh2 && dist(player.x, player.y, JOURNAL.x, JOURNAL.y) < HIDE_RANGE + 6;
         if (near) { text = isTouchRef.current ? "Tap to inspect" : "Press E to inspect"; act = true; }
+        else if (journalNear) {
+          const avail = Math.min(api.foundCount, JOURNAL_PAGES.length);
+          if (journalRead < avail) { text = isTouchRef.current ? "Tap to read journal" : "Press E to read journal"; act = true; }
+          else { text = "Daniel's journal"; }
+        }
         else if (decoyNear) { text = isTouchRef.current ? "Tap to open" : "Press E to open"; act = true; }
         else if (bNear) { text = reading > 0.15 ? "Reading the wall…" : "Stay still to read the wall"; }
         else if (spot) { text = isTouchRef.current ? "Tap E to hide" : "Press E to hide"; act = true; }
         else if (dist(player.x, player.y, EXIT_POS.x, EXIT_POS.y) < 90) {
-          if (api.allFound) { text = isTouchRef.current ? "Tap to escape" : "Press E to escape"; act = true; }
-          else { text = "The front door is locked"; locked = true; }
-        } else if (api.foundCount < 2 && dist(player.x, player.y, BASEMENT_DOOR.x, BASEMENT_DOOR.y) < 70) { text = "Basement sealed — find 2 clues"; locked = true; }
+          if (api.allFound) {
+            text = isCh2
+              ? (isTouchRef.current ? "Tap — or say her name" : "Press E — or say her name")
+              : (isTouchRef.current ? "Tap to escape" : "Press E to escape");
+            act = true;
+          } else { text = isCh2 ? "She won't let you leave yet" : "The front door is locked"; locked = true; }
+        } else if (api.foundCount < 2 && dist(player.x, player.y, BASEMENT_DOOR.x, BASEMENT_DOOR.y) < 70) { text = `Basement sealed — find 2 ${isCh2 ? "photos" : "clues"}`; locked = true; }
       }
       const sig = text + locked;
       if (sig !== lastPrompt) { lastPrompt = sig; setPrompt(text ? { text, locked } : null); }
@@ -707,7 +832,7 @@ export default function Game() {
       ctx.fillStyle = "#000"; ctx.fillRect(0, 0, view.w, view.h);
 
       for (const r of ROOMS) {
-        ctx.fillStyle = r.fill;
+        ctx.fillStyle = isCh2 ? CH2_FILLS[r.id] ?? r.fill : r.fill;
         ctx.fillRect(r.minx + ox, r.miny + oy, r.maxx - r.minx, r.maxy - r.miny);
         ctx.strokeStyle = "rgba(255,255,255,0.022)"; ctx.lineWidth = 1;
         for (let y = r.miny + 40; y < r.maxy; y += 40) { ctx.beginPath(); ctx.moveTo(r.minx + ox, y + oy); ctx.lineTo(r.maxx + ox, y + oy); ctx.stroke(); }
@@ -792,54 +917,50 @@ export default function Game() {
       if (whiteFlash > 0) { ctx.fillStyle = `rgba(255,255,255,${Math.min(whiteFlash, 0.6)})`; ctx.fillRect(0, 0, view.w, view.h); }
 
       drawNpc(ox, oy);
+      if (isCh2 && ruth.active) drawRuth(ox, oy);
       drawNotes(ox, oy);
       if (pingT > 0) drawPing(ox, oy, px, py);
       // holding breath dims the screen slightly
       if (holding) { ctx.fillStyle = "rgba(0,0,0,0.22)"; ctx.fillRect(0, 0, view.w, view.h); }
-      drawMic();
       if (caughtFx > 0) { ctx.fillStyle = `rgba(255,30,30,${Math.min(caughtFx, 1) * 0.75})`; ctx.fillRect(0, 0, view.w, view.h); }
+      updateMicUI();
     }
 
-    function drawMic() {
-      if (!micActive()) return;
-      const cx = view.w / 2, y = 30;
-      // desktop breath meter (mobile uses the button ring)
-      if (!isTouchRef.current) {
-        let bf = -1, bc = "";
-        if (holding) { bf = breathMeter; bc = "#6cc0ff"; }
-        else if (perf < breathCdUntil) { bf = 1 - (breathCdUntil - perf) / 20000; bc = "#666"; }
-        if (bf >= 0) {
-          ctx.fillStyle = "rgba(255,255,255,0.1)"; ctx.fillRect(cx - 22, y + 26, 44, 4);
-          ctx.fillStyle = bc; ctx.fillRect(cx - 22, y + 26, 44 * bf, 4);
-        }
+    // top-right DOM mic indicator, driven imperatively each frame
+    function updateMicUI() {
+      const el = micIndRef.current;
+      if (!el) return;
+      if (!micActive()) { if (el.style.display !== "none") el.style.display = "none"; return; }
+      if (el.style.display === "none") el.style.display = "flex";
+
+      const triggered = perf < micHuntUntil || micLevel >= MIC_THRESHOLD;
+      const warning = !triggered && micLevel >= MIC_WARNING;
+      const state = holding ? "breath" : triggered ? "detected" : warning ? "warning" : "silent";
+      if (el.dataset.state !== state) el.dataset.state = state;
+
+      const silent = state === "silent" && perf - micLastSound > 3000;
+      el.style.opacity = silent ? "0.4" : "1";
+
+      const bars = micBarsRef.current;
+      for (let i = 0; i < bars.length; i++) {
+        const b = bars[i];
+        if (!b) continue;
+        if (state === "breath") { b.style.transform = "scaleY(0.12)"; continue; }
+        const wob = 0.5 + 0.5 * Math.sin(perf * (state === "detected" ? 0.03 : 0.012) + i * 1.7);
+        const amp = state === "detected" ? 1 : state === "warning" ? 0.55 : 0.2;
+        const h = Math.min(1, 0.18 + micLevel * 4 * amp + wob * amp * 0.55);
+        b.style.transform = `scaleY(${h.toFixed(3)})`;
       }
-      const silent = perf - micLastSound > 3000;
-      const fade = silent ? Math.max(0, 1 - (perf - micLastSound - 3000) / 800) : 1;
-      const a = Math.max(fade, micFlash);
-      if (a > 0.01) {
-        const triggered = perf < micHuntUntil;
-        const color = triggered || micLevel >= MIC_THRESHOLD ? "#ff3030"
-          : micLevel >= MIC_WARNING ? "#ffcc33" : "#46d27a";
-        const x = cx + (triggered ? (Math.random() - 0.5) * 5 : 0);
-        ctx.save();
-        ctx.globalAlpha = a;
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        if (ctx.roundRect) ctx.roundRect(x - 5, y - 12, 10, 16, 5); else ctx.rect(x - 5, y - 12, 10, 16);
-        ctx.fill();
-        ctx.strokeStyle = color; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(x, y - 2, 8, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(x, y + 6); ctx.lineTo(x, y + 11); ctx.stroke();
-        ctx.restore();
+
+      const ring = micRingRef.current;
+      if (ring) {
+        if (state === "breath") { ring.style.opacity = "1"; ring.style.background = `conic-gradient(#aaddff ${breathMeter * 360}deg, rgba(255,255,255,0.08) 0deg)`; }
+        else ring.style.opacity = "0";
       }
-      if (perf < micHeardUntil) {
-        ctx.save();
-        ctx.globalAlpha = Math.min(1, (micHeardUntil - perf) / 600);
-        ctx.fillStyle = "#ff3030";
-        ctx.font = "bold 15px system-ui, sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText("SHE HEARD YOU", cx, y + 52);
-        ctx.restore();
+      const txt = micTextRef.current;
+      if (txt) {
+        const want = state === "breath" ? "HOLDING..." : perf < micHeardUntil ? "SHE HEARD YOU" : "";
+        if (txt.textContent !== want) { txt.textContent = want; txt.dataset.kind = state === "breath" ? "breath" : "heard"; }
       }
     }
 
@@ -879,6 +1000,14 @@ export default function Game() {
         g.addColorStop(0, `rgba(255,228,150,${0.55 * pulse})`); g.addColorStop(0.5, `rgba(220,150,60,${0.28 * pulse})`); g.addColorStop(1, "rgba(220,150,60,0)");
         ctx.fillStyle = g; ctx.fillRect(sx - 30, sy - 30, 60, 60);
         ctx.fillStyle = `rgba(255,240,200,${0.7 + 0.3 * pulse})`; ctx.beginPath(); ctx.arc(sx, sy, 4.5, 0, Math.PI * 2); ctx.fill();
+      }
+      // Chapter 2: Daniel's journal marker
+      if (isCh2 && journalRead < JOURNAL_PAGES.length) {
+        const jx = JOURNAL.x + ox, jy = JOURNAL.y + oy, pulse = 0.5 + 0.5 * Math.sin(perf * 0.004);
+        ctx.fillStyle = `rgba(110,140,255,${0.28 + 0.3 * pulse})`;
+        ctx.fillRect(jx - 7, jy - 9, 14, 18);
+        ctx.strokeStyle = "rgba(160,180,255,0.6)"; ctx.lineWidth = 1.5;
+        ctx.strokeRect(jx - 7, jy - 9, 14, 18);
       }
       // basement clue channel ring
       if (reading > 0 && !clueRef.current.foundIds.has(BASEMENT_CLUE_ID)) {
@@ -962,6 +1091,22 @@ export default function Game() {
         a.addColorStop(0, `rgba(255,0,0,${0.3 + 0.3 * Math.sin(perf * 0.05)})`); a.addColorStop(1, "rgba(255,0,0,0)");
         ctx.fillStyle = a; ctx.beginPath(); ctx.arc(gx, gy, bodyH * scale, 0, Math.PI * 2); ctx.fill();
       }
+    }
+
+    function drawRuth(ox: number, oy: number) {
+      const rx = ruth.x + ox, ry = ruth.y + oy;
+      const a = 0.45 + 0.2 * Math.sin(perf * 0.003);
+      const g = ctx.createLinearGradient(rx, ry - 75, rx, ry + 28);
+      g.addColorStop(0, "rgba(200,205,220,0.04)");
+      g.addColorStop(0.5, `rgba(170,175,195,${0.28 * a})`);
+      g.addColorStop(1, "rgba(120,125,150,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.ellipse(rx, ry - 20, 16, 56, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(190,195,215,${0.3 * a})`;
+      ctx.beginPath(); ctx.arc(rx, ry - 56, 11, 0, Math.PI * 2); ctx.fill();
+      // faint staring eyes
+      ctx.fillStyle = `rgba(225,225,240,${0.45 * a})`;
+      ctx.beginPath(); ctx.arc(rx - 4, ry - 57, 1.6, 0, Math.PI * 2); ctx.arc(rx + 4, ry - 57, 1.6, 0, Math.PI * 2); ctx.fill();
     }
 
     function drawNpc(ox: number, oy: number) {
@@ -1131,6 +1276,26 @@ export default function Game() {
       <button type="button" className="game__leave" onClick={() => navigate("/")}>✕ Leave</button>
       <div className="timer">{fmtTime(timeSec)}</div>
 
+      {micOn && (
+        <div className="mic-ind" ref={micIndRef} style={{ display: "none" }} aria-hidden="true">
+          <div className="mic-ind__text" ref={micTextRef} />
+          <div className="mic-ind__bars">
+            {[0, 1, 2].map((i) => (
+              <span key={i} ref={(el) => { micBarsRef.current[i] = el; }} />
+            ))}
+          </div>
+          <div className="mic-ind__circle">
+            <svg className="mic-ind__icon" viewBox="0 0 24 24">
+              <rect x="9" y="2.5" width="6" height="11" rx="3" />
+              <path d="M5.5 11a6.5 6.5 0 0 0 13 0" />
+              <line x1="12" y1="17.5" x2="12" y2="21" />
+            </svg>
+            <div className="mic-ind__ring" ref={micRingRef} />
+            <span className="mic-ind__x" />
+          </div>
+        </div>
+      )}
+
       <div className="hud-clues" aria-live="polite">
         <span className="hud-clues__count">{clues.foundCount}/{clues.total}</span>
         <span className="hud-clues__label">clues</span>
@@ -1203,8 +1368,10 @@ export default function Game() {
       )}
 
       {death && !showEnd && (
-        <DeathSequence onDone={() => { setDeath(false); setShowEnd(true); }} />
+        <DeathSequence eyes={isCh2 ? 2 : 1} onDone={() => { setDeath(false); setShowEnd(true); }} />
       )}
+
+      {ch2End && <Chapter2End secret={ch2End.secret} onContinue={() => navigate("/")} />}
 
       {showEnd && <EndScreen variant={ending} timeLabel={fmtTime(timeSec)} onContinue={() => navigate("/")} />}
 
